@@ -914,11 +914,14 @@ func main() {
 
 For continuous real-time streaming architectures (LLM token generation, live market tickers, real-time push notifications), use `client.StreamSSE` or `client.DoStream`. It automatically manages W3C EventSource framing (`text/event-stream`), disables total-lifecycle timeouts while preserving socket connect timeouts, and provides both iterator-based (`stream.Next()`) and channel-based (`stream.Events()`) consumption without unbounded memory buffering.
 
+> **Context & Deadline Handling:** `DoStream` automatically **detaches short parent iteration deadlines** (`vu_timeout`) using `context.WithoutCancel`, so long-lived SSE streams are not prematurely killed when the per-iteration timeout expires. Explicit parent context cancellation (e.g. scenario teardown, VU shutdown) still cleanly terminates active streams. If `ctx` is `nil` or `context.Background()`, `DoStream` falls back to the request's own context (`req.Context()`). A pre-canceled context returns an immediate error without dialing.
+
 ```go
 RunVU: func(ctx vuhive.VUContext) error {
     client := vuhivehttp.Default(ctx)
 
     // Open SSE stream — "Accept: text/event-stream" is set automatically
+    // The stream automatically survives beyond vu_timeout deadlines.
     stream, err := client.StreamSSE(ctx, "/v1/chat/completions/stream")
     if err != nil {
         return fmt.Errorf("failed to open SSE stream: %w", err)

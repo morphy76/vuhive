@@ -254,10 +254,33 @@ func (c *Client) StreamSSE(ctx context.Context, rawURL string, opts ...StreamOpt
 }
 
 // DoStream executes a custom request and wraps the response body in an SSEStream.
+//
+// Context resolution follows a precedence chain:
+//  1. If ctx is non-nil and not context.Background(), use ctx.
+//  2. Else if req is non-nil and req.Context() is non-nil and not context.Background(), use req.Context().
+//  3. Else default to context.Background().
+//
+// To support long-lived SSE streams (e.g. LLM token streaming, live event feeds),
+// DoStream detaches short parent iteration deadlines (vu_timeout) using
+// context.WithoutCancel, while a monitoring goroutine ensures the stream is
+// cleanly terminated when the parent context is explicitly canceled (e.g.
+// scenario teardown or VU cancellation).
 func (c *Client) DoStream(ctx context.Context, req *http.Request, opts ...StreamOption) (*SSEStream, error) {
 	strCfg := defaultStreamConfig()
 	for _, opt := range opts {
 		opt(&strCfg)
+	}
+
+	// --- Context precedence & fallback ---
+	effectiveCtx := resolveEffectiveContext(ctx, req)
+
+	// --- Pre-flight check: reject already-canceled context ---
+	if effectiveCtx.Err() != nil {
+		return nil, fmt.Errorf("vuhive/http: SSE stream context already canceled: %w", effectiveCtx.Err())
+	}
+
+	if req == nil {
+		return nil, fmt.Errorf("vuhive/http: SSE stream request must not be nil")
 	}
 
 	if c.cfg.baseURL != "" && req.URL != nil && (req.URL.Scheme == "" || req.URL.Host == "") {
@@ -281,7 +304,13 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request, opts ...Stream
 	method := req.Method
 	metricURL := sanitizeURL(req.URL)
 
-	streamCtx, streamCancel := context.WithCancel(ctx)
+	// --- Deadline detachment for long-lived streams ---
+	// Strip short parent iteration deadlines (vu_timeout) so they don't kill
+	// persistent SSE connections prematurely, while preserving values stored
+	// in the parent context.
+	detachedCtx := context.WithoutCancel(effectiveCtx)
+	streamCtx, streamCancel := context.WithCancel(detachedCtx)
+
 	if req.Context() != streamCtx {
 		req = req.WithContext(streamCtx)
 	}
@@ -328,7 +357,36 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request, opts ...Stream
 		lastEvent:  time.Now(),
 	}
 
+	// --- Cancellation monitoring goroutine ---
+	// Monitor the parent context for explicit cancellation (context.Canceled).
+	// Deadline expiration (context.DeadlineExceeded) is intentionally ignored
+	// to allow long-lived streams to survive short iteration timeouts.
+	go func() {
+		select {
+		case <-effectiveCtx.Done():
+			if errors.Is(effectiveCtx.Err(), context.Canceled) {
+				streamCancel()
+			}
+			// DeadlineExceeded: intentionally do NOT cancel the stream.
+		case <-streamCtx.Done():
+			// Stream was closed independently (e.g. via stream.Close()).
+		}
+	}()
+
 	return stream, nil
+}
+
+// resolveEffectiveContext determines the best available context for stream lifecycle.
+func resolveEffectiveContext(ctx context.Context, req *http.Request) context.Context {
+	if ctx != nil && ctx != context.Background() {
+		return ctx
+	}
+	if req != nil {
+		if reqCtx := req.Context(); reqCtx != nil && reqCtx != context.Background() {
+			return reqCtx
+		}
+	}
+	return context.Background()
 }
 
 var _ io.Closer = (*SSEStream)(nil)
