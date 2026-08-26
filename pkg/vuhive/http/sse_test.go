@@ -325,3 +325,180 @@ func TestSSE_Client_DoStream_CustomMethodAndBody(t *testing.T) {
 	assert.False(t, stream.Next())
 	assert.NoError(t, stream.Err())
 }
+
+func TestSSE_DoStream_NilContext_FallsBackToReqContext(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: ok\n\n"))
+	}))
+	defer ts.Close()
+
+	_, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/nil-ctx", nil)
+	require.NoError(t, err)
+
+	//nolint:staticcheck // SA1012: intentionally passing nil ctx to test fallback behavior
+	stream, err := client.DoStream(nil, req)
+	require.NoError(t, err, "DoStream should not panic or fail when ctx is nil")
+	defer func() { _ = stream.Close() }()
+
+	require.True(t, stream.Next())
+	assert.Equal(t, "ok", stream.Event().Data)
+	assert.False(t, stream.Next())
+	assert.NoError(t, stream.Err())
+}
+
+func TestSSE_DoStream_BackgroundContext_FallsBackToReqContext(t *testing.T) {
+	reqCtx, reqCancel := context.WithCancel(context.Background())
+	defer reqCancel()
+
+	serverClosed := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		_, _ = fmt.Fprintf(w, "data: initial\n\n")
+		flusher.Flush()
+
+		<-r.Context().Done()
+		close(serverClosed)
+	}))
+	defer ts.Close()
+
+	_, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, ts.URL+"/bg-ctx", nil)
+	require.NoError(t, err)
+
+	// Pass context.Background() as ctx; DoStream should fall back to req.Context() (reqCtx).
+	stream, err := client.DoStream(context.Background(), req)
+	require.NoError(t, err)
+	defer func() { _ = stream.Close() }()
+
+	require.True(t, stream.Next())
+	assert.Equal(t, "initial", stream.Event().Data)
+
+	// Cancel reqCtx — should eventually tear down the stream since it was used as effective context.
+	reqCancel()
+
+	assert.False(t, stream.Next(), "Next should return false after reqCtx cancel")
+
+	select {
+	case <-serverClosed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not observe context cancellation within 2s")
+	}
+}
+
+func TestSSE_DoStream_PreCanceledContext_ReturnsError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: should_not_reach\n\n"))
+	}))
+	defer ts.Close()
+
+	_, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	stream, err := client.DoStream(ctx, nil)
+	assert.Error(t, err, "DoStream should return error for pre-canceled context")
+	assert.Nil(t, stream)
+	assert.Contains(t, err.Error(), "context", "error should reference context cancellation")
+}
+
+func TestSSE_DoStream_DeadlineDoesNotKillStream(t *testing.T) {
+	// Core bug fix test: A short parent deadline must NOT kill a long-lived SSE stream.
+	eventCount := 5
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+
+		for i := 1; i <= eventCount; i++ {
+			_, _ = fmt.Fprintf(w, "data: event_%d\n\n", i)
+			flusher.Flush()
+			time.Sleep(50 * time.Millisecond)
+		}
+	}))
+	defer ts.Close()
+
+	_, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+
+	// Create a parent context with a very short deadline (100ms).
+	// The stream will take ~250ms to deliver all 5 events.
+	// Before this fix, the stream would be killed after 100ms.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	stream, err := client.StreamSSE(ctx, ts.URL+"/deadline-test")
+	require.NoError(t, err, "StreamSSE should connect before deadline expires")
+	defer func() { _ = stream.Close() }()
+
+	var received []string
+	for stream.Next() {
+		received = append(received, stream.Event().Data)
+	}
+
+	require.NoError(t, stream.Err(), "stream should complete without error")
+	assert.Equal(t, eventCount, len(received), "all events should be received despite short parent deadline")
+	for i, data := range received {
+		assert.Equal(t, fmt.Sprintf("event_%d", i+1), data)
+	}
+}
+
+func TestSSE_DoStream_ExplicitCancelKillsStream(t *testing.T) {
+	// Explicit parent cancel (not deadline) should still cleanly terminate the stream.
+	serverClosed := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+
+		_, _ = fmt.Fprintf(w, "data: first\n\n")
+		flusher.Flush()
+
+		<-r.Context().Done()
+		close(serverClosed)
+	}))
+	defer ts.Close()
+
+	_, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := client.StreamSSE(ctx, ts.URL+"/explicit-cancel")
+	require.NoError(t, err)
+	defer func() { _ = stream.Close() }()
+
+	require.True(t, stream.Next())
+	assert.Equal(t, "first", stream.Event().Data)
+
+	// Explicit cancel — should terminate the stream.
+	cancel()
+
+	assert.False(t, stream.Next(), "Next should return false after explicit cancel")
+
+	select {
+	case <-serverClosed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not observe explicit context cancellation within 2s")
+	}
+}
