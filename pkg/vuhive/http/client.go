@@ -211,8 +211,9 @@ func (t *standardTransport) RoundTrip(req *http.Request) (*http.Response, error)
 					buf.WriteString("event: " + ev.Event + "\n")
 				}
 				if ev.Retry > 0 {
-					buf.WriteString(fmt.Sprintf("retry: %d\n", ev.Retry))
+					fmt.Fprintf(&buf, "retry: %d\n", ev.Retry)
 				}
+
 				for _, line := range strings.Split(ev.Data, "\n") {
 					buf.WriteString("data: " + line + "\n")
 				}
