@@ -419,24 +419,24 @@ type mockSetupContext struct {
 	httpCfg vuhive.HTTPConfig
 }
 
-func (m *mockSetupContext) Metrics() vuhive.MetricsCollector { return m.metrics }
-func (m *mockSetupContext) Log() vuhive.Logger { return nil }
-func (m *mockSetupContext) Param(key string) string { return "" }
-func (m *mockSetupContext) ParamInt(key string, def int) int { return def }
+func (m *mockSetupContext) Metrics() vuhive.MetricsCollector                          { return m.metrics }
+func (m *mockSetupContext) Log() vuhive.Logger                                        { return nil }
+func (m *mockSetupContext) Param(key string) string                                   { return "" }
+func (m *mockSetupContext) ParamInt(key string, def int) int                          { return def }
 func (m *mockSetupContext) ParamDuration(key string, def time.Duration) time.Duration { return def }
-func (m *mockSetupContext) HTTPConfig() vuhive.HTTPConfig { return m.httpCfg }
-func (m *mockSetupContext) HTTPClients() map[string]vuhive.HTTPConfig { return nil }
+func (m *mockSetupContext) HTTPConfig() vuhive.HTTPConfig                             { return m.httpCfg }
+func (m *mockSetupContext) HTTPClients() map[string]vuhive.HTTPConfig                 { return nil }
 
 type mockVUContext struct {
 	mockSetupContext
 }
 
-func (m *mockVUContext) VUID() int64 { return 1 }
-func (m *mockVUContext) Iteration() int64 { return 0 }
-func (m *mockVUContext) ScenarioName() string { return "mock" }
-func (m *mockVUContext) GlobalState(key string) any { return nil }
-func (m *mockVUContext) Sleep(d ...time.Duration) error { return nil }
-func (m *mockVUContext) Check(name string, fn vuhive.CheckFunc) bool { return true }
+func (m *mockVUContext) VUID() int64                                                  { return 1 }
+func (m *mockVUContext) Iteration() int64                                             { return 0 }
+func (m *mockVUContext) ScenarioName() string                                         { return "mock" }
+func (m *mockVUContext) GlobalState(key string) any                                   { return nil }
+func (m *mockVUContext) Sleep(d ...time.Duration) error                               { return nil }
+func (m *mockVUContext) Check(name string, fn vuhive.CheckFunc) bool                  { return true }
 func (m *mockVUContext) Group(name string, fn func(ctx vuhive.VUContext) error) error { return fn(m) }
 
 func TestNewClientFromConfig_FullDeclarativeConfig(t *testing.T) {
@@ -626,4 +626,99 @@ func TestDefault_LazySharedSingleton(t *testing.T) {
 	wg.Wait()
 }
 
+func TestClient_Do_NilContextFallback(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
 
+	_, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/nil-ctx-test", nil)
+	require.NoError(t, err)
+
+	//nolint:staticcheck // SA1012: intentionally testing nil context fallback
+	resp, err := client.Do(nil, req)
+	require.NoError(t, err, "client.Do(nil, req) should not panic or fail")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestClient_StandardClient_RestRequests(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Echo-Header", r.Header.Get("X-Custom"))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"result":"standard-ok"}`))
+	}))
+	defer ts.Close()
+
+	store, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+	stdClient := client.StandardClient()
+	require.NotNil(t, stdClient)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/std-rest", nil)
+	require.NoError(t, err)
+	req.Header.Set("X-Custom", "val-123")
+
+	resp, err := stdClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "val-123", resp.Header.Get("X-Echo-Header"))
+
+	counterVal := store.AggregatedCounterValue(vuhive.MetricHTTPReqs)
+	assert.Equal(t, int64(1), counterVal, "StandardClient REST request should record standard metrics")
+}
+
+func TestClient_StandardClient_SSERequests(t *testing.T) {
+	serverClosed := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flusher, ok := w.(http.Flusher)
+			if ok {
+				_, _ = w.Write([]byte("event: custom\ndata: stream-payload-1\n\n"))
+				flusher.Flush()
+			}
+			<-r.Context().Done()
+			close(serverClosed)
+			return
+		}
+		http.Error(w, "not sse", http.StatusBadRequest)
+	}))
+	defer ts.Close()
+
+	store, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+	stdClient := client.StandardClient()
+	require.NotNil(t, stdClient)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/std-sse", nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream; charset=utf-8")
+
+	resp, err := stdClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
+
+	buf := make([]byte, 128)
+	n, err := resp.Body.Read(buf)
+	require.NoError(t, err)
+	assert.Contains(t, string(buf[:n]), "data: stream-payload-1")
+
+	// Close response body -> should close underlying stream and server connection
+	_ = resp.Body.Close()
+
+	select {
+	case <-serverClosed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("closing StandardClient response body should cancel underlying SSE stream")
+	}
+
+	assert.Equal(t, int64(1), store.AggregatedCounterValue(vuhive.MetricHTTPSSEConnectionsTotal))
+}

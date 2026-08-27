@@ -502,3 +502,30 @@ func TestSSE_DoStream_ExplicitCancelKillsStream(t *testing.T) {
 		t.Fatal("server did not observe explicit context cancellation within 2s")
 	}
 }
+
+func TestSSE_DoStream_AcceptHeaderVariations(t *testing.T) {
+	var capturedAccept string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAccept = r.Header.Get("Accept")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: accept-ok\n\n"))
+	}))
+	defer ts.Close()
+
+	_, metrics := newTestStore(t)
+	client := vuhivehttp.NewClientWithCollector(metrics)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/accept-var", nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream; charset=utf-8")
+
+	stream, err := client.DoStream(context.Background(), req)
+	require.NoError(t, err)
+	defer func() { _ = stream.Close() }()
+
+	assert.Equal(t, "text/event-stream; charset=utf-8", capturedAccept)
+	require.True(t, stream.Next())
+	assert.Equal(t, "accept-ok", stream.Event().Data)
+	assert.False(t, stream.Next())
+}

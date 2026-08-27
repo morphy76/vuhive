@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -63,8 +64,7 @@ type SSEStream struct {
 	current SSEEvent
 	err     error
 
-	closed  bool
-	closeMu sync.Mutex
+	closed atomic.Bool
 
 	eventsChan chan SSEEvent
 	eventsOnce sync.Once
@@ -72,7 +72,7 @@ type SSEStream struct {
 
 // Next reads the next SSEEvent from the stream. Returns false on stream EOF or ctx cancellation.
 func (s *SSEStream) Next() bool {
-	if s.err != nil || s.closed {
+	if s.err != nil || s.closed.Load() {
 		return false
 	}
 
@@ -203,13 +203,9 @@ func (s *SSEStream) Err() error {
 
 // Close terminates the streaming connection and releases underlying network resources.
 func (s *SSEStream) Close() error {
-	s.closeMu.Lock()
-	defer s.closeMu.Unlock()
-
-	if s.closed {
+	if s.closed.Swap(true) {
 		return nil
 	}
-	s.closed = true
 
 	if s.cancel != nil {
 		s.cancel()
@@ -389,5 +385,9 @@ func resolveEffectiveContext(ctx context.Context, req *http.Request) context.Con
 	return context.Background()
 }
 
-var _ io.Closer = (*SSEStream)(nil)
+// isSSEAcceptHeader returns true if the Accept header indicates an SSE stream request.
+func isSSEAcceptHeader(accept string) bool {
+	return strings.Contains(strings.ToLower(accept), "text/event-stream")
+}
 
+var _ io.Closer = (*SSEStream)(nil)

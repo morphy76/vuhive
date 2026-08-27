@@ -507,6 +507,28 @@ RunVU: func(ctx vuhive.VUContext) error {
 }
 ```
 
+### Third-Party SDK Integration (`StandardClient` / `Transport`)
+
+When integrating third-party client SDKs (e.g. OpenAI, Anthropic, or custom AI clients) that accept a standard Go `*http.Client` or `http.RoundTripper`, use `client.StandardClient()` or `client.Transport()`:
+
+```go
+RunVU: func(ctx vuhive.VUContext) error {
+    vClient := vuhivehttp.Default(ctx)
+
+    // Obtain standard *http.Client backed by vuhive instrumentation
+    stdClient := vClient.StandardClient()
+
+    // Pass directly to third-party SDK
+    sdk := myclient.New(myclient.WithHTTPClient(stdClient))
+    return sdk.ChatStream(ctx, "Hello!")
+}
+```
+
+- **Seamless SSE & REST Routing**: Automatically detects `Accept: text/event-stream` and routes via `DoStream`, piping SSE events into streaming `*http.Response` bodies while routing REST calls via `Do`.
+- **Automatic Telemetry**: Records all standard `vuhive.http.*` and `vuhive.http.sse.*` metrics seamlessly.
+- **Resource Management**: Closing the returned `resp.Body` immediately tears down the underlying SSE stream.
+
+
 ### Auto-Recorded HTTP & SSE Metrics
 
 | Metric Identifier | Type | Tags | Description |

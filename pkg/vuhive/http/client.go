@@ -1,7 +1,11 @@
 package http
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/morphy76/vuhive/pkg/vuhive"
@@ -162,3 +166,109 @@ func newClientWithMetrics(metrics vuhive.MetricsCollector, opts ...Option) *Clie
 	}
 }
 
+// Transport returns an http.RoundTripper that automatically routes requests through this instrumented Client.
+// Requests with an 'Accept' header containing 'text/event-stream' are transparently executed via DoStream
+// and piped into standard HTTP streaming response bodies. All other requests are executed via Do.
+func (c *Client) Transport() http.RoundTripper {
+	return &standardTransport{client: c}
+}
+
+// StandardClient returns a standard *http.Client backed by this instrumented Client.
+// Use this to seamlessly integrate third-party SDKs (such as OpenAI, Anthropic, or AIW) that accept
+// standard *http.Client instances while preserving full vuhive metrics recording and streaming support.
+func (c *Client) StandardClient() *http.Client {
+	return &http.Client{
+		Transport: c.Transport(),
+	}
+}
+
+type standardTransport struct {
+	client *Client
+}
+
+func (t *standardTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+	acceptHeader := req.Header.Get("Accept")
+
+	if isSSEAcceptHeader(acceptHeader) {
+		stream, err := t.client.DoStream(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+		pr, pw := io.Pipe()
+		go func() {
+			defer func() {
+				_ = stream.Close()
+			}()
+			for stream.Next() {
+				ev := stream.Event()
+				var buf bytes.Buffer
+				if ev.ID != "" {
+					buf.WriteString("id: " + ev.ID + "\n")
+				}
+				if ev.Event != "" && ev.Event != "message" {
+					buf.WriteString("event: " + ev.Event + "\n")
+				}
+				if ev.Retry > 0 {
+					fmt.Fprintf(&buf, "retry: %d\n", ev.Retry)
+				}
+
+				for _, line := range strings.Split(ev.Data, "\n") {
+					buf.WriteString("data: " + line + "\n")
+				}
+				buf.WriteString("\n")
+				if _, writeErr := pw.Write(buf.Bytes()); writeErr != nil {
+					_ = pw.CloseWithError(writeErr)
+					return
+				}
+			}
+			if err := stream.Err(); err != nil {
+				_ = pw.CloseWithError(err)
+			} else {
+				_ = pw.Close()
+			}
+		}()
+
+		return &http.Response{
+			StatusCode: stream.StatusCode,
+			Status:     fmt.Sprintf("%d %s", stream.StatusCode, http.StatusText(stream.StatusCode)),
+			Header:     stream.Headers.Clone(),
+			Body:       &pipeStreamBody{PipeReader: pr, stream: stream},
+			Request:    req,
+		}, nil
+	}
+
+	resp, err := t.client.Do(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &http.Response{
+		StatusCode:    resp.StatusCode,
+		Status:        fmt.Sprintf("%d %s", resp.StatusCode, http.StatusText(resp.StatusCode)),
+		Header:        resp.Headers.Clone(),
+		Body:          io.NopCloser(bytes.NewReader(resp.Body)),
+		ContentLength: int64(len(resp.Body)),
+		Request:       req,
+	}, nil
+}
+
+type pipeStreamBody struct {
+	*io.PipeReader
+	stream *SSEStream
+}
+
+func (b *pipeStreamBody) Close() error {
+	streamErr := b.stream.Close()
+	pipeErr := b.PipeReader.Close()
+	if streamErr != nil {
+		return streamErr
+	}
+	return pipeErr
+}
+
+var (
+	_ http.RoundTripper = (*standardTransport)(nil)
+	_ io.ReadCloser     = (*pipeStreamBody)(nil)
+)

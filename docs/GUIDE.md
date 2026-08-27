@@ -948,7 +948,32 @@ RunVU: func(ctx vuhive.VUContext) error {
 }
 ```
 
+#### Third-Party SDK Integration (`StandardClient` & `Transport`)
+
+If your load test uses an external Go client library (such as an LLM provider SDK, custom gRPC-gateway client, or third-party HTTP client) that requires a standard `*http.Client` or `http.RoundTripper`, use `client.StandardClient()` or `client.Transport()`:
+
+```go
+RunVU: func(ctx vuhive.VUContext) error {
+    // 1. Obtain standard *http.Client backed by vuhive instrumentation
+    stdClient := vuhivehttp.Default(ctx).StandardClient()
+
+    // 2. Pass into third-party SDK constructor
+    sdkClient := thirdparty.NewClient(
+        thirdparty.WithHTTPClient(stdClient),
+        thirdparty.WithBaseURL("https://api.example.com"),
+    )
+
+    // 3. Execute requests or streaming calls via the SDK
+    return sdkClient.StreamCompletions(ctx, prompt)
+}
+```
+
+- **Transparent SSE Streaming**: Requests specifying `Accept: text/event-stream` are automatically executed via `DoStream` with detached deadlines, streaming chunks through the standard `*http.Response.Body`.
+- **Zero-Boilerplate Telemetry**: Full `vuhive.http.*` and `vuhive.http.sse.*` metrics are collected without requiring custom adapters.
+- **Safe Socket Cleanup**: When the SDK calls `resp.Body.Close()`, the underlying `SSEStream` is immediately terminated.
+
 #### Auto-Recorded HTTP & SSE Metrics
+
 
 | Metric Identifier | Type | Tags | Description |
 |---|---|---|---|
