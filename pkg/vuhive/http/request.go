@@ -78,6 +78,12 @@ func (c *Client) Delete(ctx context.Context, rawURL string) (*Response, error) {
 // Default headers configured via WithHeader/WithHeaders are added to the request.
 // Metrics are automatically recorded for every call.
 func (c *Client) Do(ctx context.Context, req *http.Request) (*Response, error) {
+	if req == nil {
+		return nil, fmt.Errorf("vuhive/http: request must not be nil")
+	}
+
+	effectiveCtx := resolveEffectiveContext(ctx, req)
+
 	if c.cfg.baseURL != "" && req.URL != nil && (req.URL.Scheme == "" || req.URL.Host == "") {
 		resolved, err := url.Parse(c.resolveURL(req.URL.String()))
 		if err == nil {
@@ -97,14 +103,15 @@ func (c *Client) Do(ctx context.Context, req *http.Request) (*Response, error) {
 
 	var timings traceTimings
 	if c.cfg.detailedTiming {
-		traceCtx := httptrace.WithClientTrace(ctx, newClientTrace(&timings))
+		traceCtx := httptrace.WithClientTrace(effectiveCtx, newClientTrace(&timings))
 		req = req.WithContext(traceCtx)
-	} else if req.Context() != ctx {
-		req = req.WithContext(ctx)
+	} else if req.Context() != effectiveCtx {
+		req = req.WithContext(effectiveCtx)
 	}
 
 	start := time.Now()
 	resp, err := c.inner.Do(req)
+
 	totalDuration := time.Since(start)
 
 	if err != nil {
