@@ -1,17 +1,17 @@
 # HTTP Checkout Flow Example
 
-A foundational reference example demonstrating standard REST API load testing with `vuhive`.
+A foundational reference example demonstrating standard REST API load testing with `vuhive` using standard `*http.Client` wrapped with `vuhivehttp.Instrument()`.
 
 ---
 
 ## Concept Overview
 
 This example demonstrates the fundamental workflow of a `vuhive` load test:
-- Initializing shared, thread-safe resources (like an `http.Client`) once during the `Setup` lifecycle phase.
+- Initializing shared, thread-safe resources (like an `*http.Client`) once during the `Setup` lifecycle phase.
+- Wrapping the standard client with `vuhivehttp.Instrument(client)` for automatic latency, counter, and failure rate metric recording.
 - Passing shared handles to Virtual Users (VUs) via `GlobalState`.
 - Reading scenario configuration parameters dynamically via `ctx.Param()`.
-- Recording high-resolution latency percentiles with HDR Histograms (`ctx.Metrics().Duration(...)`).
-- Tracking success rates (`ctx.Metrics().Rate(...)`) and throughput counters (`ctx.Metrics().Counter(...)`).
+- Executing standard `client.Do(req)` in `RunVU` without repetitive manual telemetry code.
 - Defining and evaluating declarative SLA threshold quality gates in `vuhive.yaml`.
 
 ---
@@ -20,7 +20,7 @@ This example demonstrates the fundamental workflow of a `vuhive` load test:
 
 | File | Description |
 |---|---|
-| [`main.go`](main.go) | Scenario definition, lifecycle hooks (`Setup`, `PreTest`, `RunVU`, `AfterTest`, `Teardown`), HTTP request execution, and metric recording. Includes an in-process mock HTTP backend server. |
+| [`main.go`](main.go) | Scenario definition, lifecycle hooks (`Setup`, `PreTest`, `RunVU`, `AfterTest`, `Teardown`), `vuhivehttp.Instrument` client wrapping, and HTTP request execution. Includes an in-process mock HTTP backend server. |
 | [`vuhive.yaml`](vuhive.yaml) | Declarative load profile configuration specifying `constant_vus` concurrency, durations, custom parameters, and SLA quality gates. |
 
 ---
@@ -61,14 +61,14 @@ scenarios:
       checkout_path: "/checkout"  # Accessed via ctx.Param("checkout_path")
 
     thresholds:
-      - metric: http_request_duration
+      - metric: vuhive.http.req_duration
         stat: p95
         operator: "<"
         target: "200ms"           # 95th percentile latency must be under 200ms
-      - metric: checkout_success_rate
+      - metric: vuhive.http.req_failed
         stat: rate
-        operator: ">="
-        target: "0.9"             # Success rate must be >= 90%
+        operator: "<="
+        target: "0.05"            # Failure rate must be <= 5%
 ```
 
 ---
@@ -94,17 +94,17 @@ vuhive.vu.pretest_errors        Counter    0
 vuhive.checks.passed            Counter    0
 vuhive.checks.failed            Counter    0
 
-CUSTOM METRICS
+HTTP METRICS
 ────────────────────────────────────────────────────────────────
 Metric                         Type       Count    Min     Mean    p95     p99     Max    
-checkout_success_rate          Rate       (rate: 1)
-http_request_duration          Duration   389      5.628ms 7.217ms 8.519ms 9.367ms 11.495ms
-http_requests_total            Counter    389     
+vuhive.http.req_duration       Duration   389      5.628ms 7.217ms 8.519ms 9.367ms 11.495ms
+vuhive.http.req_failed         Rate       (rate: 0)
+vuhive.http.reqs               Counter    389     
 
 SLA THRESHOLD EVALUATION
 ────────────────────────────────────────────────────────────────
-  [PASS]  http_request_duration   p95 < 200ms     → actual: 8.519ms
-  [PASS]  checkout_success_rate   rate >= 0.9     → actual: 1
+  [PASS]  vuhive.http.req_duration   p95 < 200ms     → actual: 8.519ms
+  [PASS]  vuhive.http.req_failed     rate <= 0.05    → actual: 0
 ────────────────────────────────────────────────────────────────
 OVERALL: PASSED                                         (exit 0)
 ================================================================================

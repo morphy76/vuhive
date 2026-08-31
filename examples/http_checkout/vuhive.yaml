@@ -18,11 +18,11 @@ scenarios:
 
     # Declarative SLA quality gates evaluated at test completion
     thresholds:
-      - metric: http_request_duration
+      - metric: vuhive.http.req_duration
         stat: p95
         operator: "<"
         target: "200ms"
-      - metric: checkout_success_rate
+      - metric: vuhive.http.req_failed
         stat: rate
-        operator: ">="
-        target: "0.9"
+        operator: "<="
+        target: "0.05"

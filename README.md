@@ -528,6 +528,32 @@ RunVU: func(ctx vuhive.VUContext) error {
 - **Automatic Telemetry**: Records all standard `vuhive.http.*` and `vuhive.http.sse.*` metrics seamlessly.
 - **Resource Management**: Closing the returned `resp.Body` immediately tears down the underlying SSE stream.
 
+### Wrapping Pre-Configured Clients (`vuhivehttp.Instrument`)
+
+When bringing your own pre-configured `*http.Client` or `http.RoundTripper` (e.g. AWS SDK, Google Cloud Client, Stripe SDK, or specialized OAuth2 clients), use `vuhivehttp.Instrument()` or `vuhivehttp.InstrumentTransport()`:
+
+```go
+Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
+    baseClient := &http.Client{Timeout: 5 * time.Second}
+    client := vuhivehttp.Instrument(
+        baseClient,
+        vuhivehttp.WithMetricPrefix("vuhive.http."),
+        vuhivehttp.WithTags(vuhive.Tags{"env": "staging"}),
+    )
+    return map[string]any{"client": client}, nil
+},
+RunVU: func(ctx vuhive.VUContext) error {
+    client := ctx.GlobalState("client").(*http.Client)
+    req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example.com/items", nil)
+    resp, err := client.Do(req) // Telemetry is recorded dynamically from ctx
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    return nil
+}
+```
+
 
 ### Auto-Recorded HTTP & SSE Metrics
 
