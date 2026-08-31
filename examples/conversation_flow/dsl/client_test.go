@@ -58,6 +58,15 @@ func (m *mockScenarioContext) Check(name string, fn vuhive.CheckFunc) bool {
 	}
 	return false
 }
+func (m *mockScenarioContext) CheckEqual(name string, actual, expected any) bool {
+	return actual == expected
+}
+func (m *mockScenarioContext) CheckTrue(name string, condition bool, failureReason ...string) bool {
+	return condition
+}
+func (m *mockScenarioContext) CheckNoError(name string, err error) bool {
+	return err == nil
+}
 func (m *mockScenarioContext) Group(name string, fn func(ctx vuhive.VUContext) error) error {
 	if fn != nil {
 		return fn(m)

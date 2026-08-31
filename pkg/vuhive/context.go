@@ -113,6 +113,22 @@ type WorkflowController interface {
 	// returns a failure reason. Returns true if the check passed.
 	Check(name string, fn CheckFunc) bool
 
+	// CheckEqual evaluates actual == expected under the given check name.
+	// Increments vuhive.checks.passed if actual equals expected, or vuhive.checks.failed if they differ.
+	// Returns true if the check passed.
+	CheckEqual(name string, actual, expected any) bool
+
+	// CheckTrue evaluates condition under the given check name.
+	// Increments vuhive.checks.passed if condition is true, or vuhive.checks.failed if false.
+	// An optional failureReason can be provided to customize the failure message.
+	// Returns true if the check passed.
+	CheckTrue(name string, condition bool, failureReason ...string) bool
+
+	// CheckNoError evaluates that err == nil under the given check name.
+	// Increments vuhive.checks.passed if err is nil, or vuhive.checks.failed if err is not nil.
+	// Returns true if the check passed.
+	CheckNoError(name string, err error) bool
+
 	// Group executes fn within a named transaction boundary.
 	// Duration is automatically recorded to "vuhive.group.<name>.duration".
 	// Nested groups are allowed; names are concatenated with "::".

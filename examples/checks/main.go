@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/morphy76/vuhive/pkg/vuhive"
@@ -70,46 +69,32 @@ func main() {
 				return fmt.Errorf("failed to read response body: %w", err)
 			}
 
-			// Step 3: Perform inline assertions using ctx.Check()
+			// Step 3: Perform inline assertions using declarative helpers and context methods
 			//
-			// Check contract:
-			// - Return "" (empty string) to indicate the check PASSED.
-			// - Return a descriptive failure reason string to indicate the check FAILED.
-			// - Unlike returning an error from RunVU, failed checks DO NOT abort the iteration.
+			// Check mechanisms:
+			// - Direct context methods: ctx.CheckEqual, ctx.CheckTrue, ctx.CheckNoError
+			// - Composable assertion generators: vuhive.Equal, vuhive.True, vuhive.NoError, vuhive.Contains, vuhive.InRange
+			// - Custom closures: func() string returning "" on pass or failure reason on fail
+			// - Failed checks DO NOT abort the iteration.
 			// - vuhive automatically records vuhive.checks.passed and vuhive.checks.failed metrics
 			//   tagged with the check name, and prints a dedicated CHECKS table in the report.
 
-			// Check 1: Validate HTTP Status Code is 200
-			ctx.Check("status code is 200", func() string {
-				if resp.StatusCode != http.StatusOK {
-					return fmt.Sprintf("expected HTTP 200, got %d", resp.StatusCode)
-				}
-				return ""
-			})
+			// Check 1: Validate HTTP Status Code is 200 using direct context helper
+			ctx.CheckEqual("status code is 200", resp.StatusCode, http.StatusOK)
 
-			// Check 2: Validate Content-Type header is JSON
-			ctx.Check("content-type is json", func() string {
-				ct := resp.Header.Get("Content-Type")
-				if !strings.Contains(ct, "application/json") {
-					return fmt.Sprintf("expected application/json, got %q", ct)
-				}
-				return ""
-			})
+			// Check 2: Validate Content-Type header using composable assertion generator
+			ctx.Check("content-type is json", vuhive.Contains(resp.Header.Get("Content-Type"), "application/json"))
 
-			// Check 3: Validate JSON payload structure and status field value
+			// Check 3: Validate JSON payload unmarshaling without error
 			var res apiResponse
-			if err := json.Unmarshal(bodyBytes, &res); err != nil {
-				ctx.Check("response body is valid json", func() string {
-					return fmt.Sprintf("invalid json payload: %v", err)
-				})
-			} else {
-				ctx.Check("response status is success", func() string {
-					if res.Status != "success" {
-						return fmt.Sprintf("expected status 'success', got %q", res.Status)
-					}
-					return ""
-				})
-			}
+			unmarshalErr := json.Unmarshal(bodyBytes, &res)
+			ctx.CheckNoError("response body is valid json", unmarshalErr)
+
+			// Check 4: Validate JSON status field value using direct context helper
+			ctx.CheckEqual("response status is success", res.Status, "success")
+
+			// Check 5: Validate message is non-empty using direct boolean assertion
+			ctx.CheckTrue("response message is present", len(res.Message) > 0)
 
 			return nil
 		},

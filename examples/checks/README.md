@@ -7,9 +7,10 @@ A focused reference example demonstrating how to validate functional conditions 
 ## Concept Overview
 
 In load testing, validating API correctness without prematurely aborting virtual users is essential:
-- **`ctx.Check(name, fn)`** allows you to perform inline assertions (status codes, headers, response JSON values) in `RunVU`.
+- **Convenience Context Assertions**: `ctx.CheckEqual()`, `ctx.CheckTrue()`, and `ctx.CheckNoError()` provide clean, expressive one-line assertions with zero allocations on passing checks.
+- **Composable Assertion Generators**: `vuhive.Equal()`, `vuhive.True()`, `vuhive.NoError()`, `vuhive.Contains()`, and `vuhive.InRange()` return standard `CheckFunc` closures for use with `ctx.Check(name, fn)`.
+- **Custom Closures**: `ctx.Check(name, fn)` supports custom closures returning `""` (empty string) on pass, or a descriptive reason string on failure.
 - **Non-Fatal**: If a check fails, the iteration continues normally, recording the failure for statistical analysis.
-- **Contract**: The check function returns `""` (empty string) on pass, or a descriptive reason string on failure.
 - **Auto-Instrumentation**: `vuhive` automatically tracks `vuhive.checks.passed` and `vuhive.checks.failed` counters tagged with the check name.
 - **Dedicated Reporting**: Check pass rates and failure counts are displayed in a formatted `CHECKS` summary table.
 - **SLA Threshold Integration**: You can define SLA quality gates on check metrics (e.g. `vuhive.checks.failed count <= 0`).
@@ -20,7 +21,7 @@ In load testing, validating API correctness without prematurely aborting virtual
 
 | File | Description |
 |---|---|
-| [`main.go`](main.go) | Scenario demonstrating HTTP status code, Content-Type header, and JSON payload checks. Includes an in-process mock API server. |
+| [`main.go`](main.go) | Scenario demonstrating direct context methods (`CheckEqual`, `CheckNoError`, `CheckTrue`) and assertion generator (`vuhive.Contains`). Includes an in-process mock API server. |
 | [`vuhive.yaml`](vuhive.yaml) | Configuration with SLA thresholds asserting zero check failures (`vuhive.checks.failed <= 0`). |
 
 ---
@@ -82,29 +83,31 @@ scenarios:
 Scenario:     checks_demo                     Version: dev
 Mode:         constant_vus (4 VUs)            Commit:  none
 Duration:     00:00:00  (ramp-up: 50ms | run: 300ms | ramp-down: 50ms)
-Iterations:   13234 total  |  0 failed (0.00%)  |  0 timeout
+Iterations:   14821 total  |  0 failed (0.00%)  |  0 timeout
 
 BUILT-IN METRICS
 ────────────────────────────────────────────────────────────────
-vuhive.vu.iterations_total      Counter    13234
+vuhive.vu.iterations_total      Counter    14821
 vuhive.vu.iterations_failed     Counter    0
 vuhive.vu.iterations_timeout    Counter    0
 vuhive.vu.panics                Counter    0
 vuhive.vu.pretest_errors        Counter    0
-vuhive.checks.passed            Counter    39702
+vuhive.checks.passed            Counter    74105
 vuhive.checks.failed            Counter    0
 
 CHECKS
 ────────────────────────────────────────────────────────────────
 Check Name                     Passed     Failed   Pass %  
-content-type is json           13234      0        100.00%
-response status is success     13234      0        100.00%
-status code is 200             13234      0        100.00%
+content-type is json           14821      0        100.00%
+response body is valid json    14821      0        100.00%
+response message is present    14821      0        100.00%
+response status is success     14821      0        100.00%
+status code is 200             14821      0        100.00%
 
 SLA THRESHOLD EVALUATION
 ────────────────────────────────────────────────────────────────
   [PASS]  vuhive.checks.failed     count <= 0      → actual: 0
-  [PASS]  vuhive.checks.passed     count >= 10     → actual: 39702
+  [PASS]  vuhive.checks.passed     count >= 10     → actual: 74105
 ────────────────────────────────────────────────────────────────
 OVERALL: PASSED                                         (exit 0)
 ================================================================================

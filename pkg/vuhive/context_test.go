@@ -77,7 +77,7 @@ func (mockState) GlobalState(key string) any {
 }
 
 type mockWorkflow struct {
-	slept  bool
+	slept       bool
 	checkResult bool
 }
 
@@ -93,6 +93,23 @@ func (m *mockWorkflow) Check(name string, fn vuhive.CheckFunc) bool {
 	}
 	m.checkResult = false
 	return false
+}
+
+func (m *mockWorkflow) CheckEqual(name string, actual, expected any) bool {
+	res := actual == expected
+	m.checkResult = res
+	return res
+}
+
+func (m *mockWorkflow) CheckTrue(name string, condition bool, failureReason ...string) bool {
+	m.checkResult = condition
+	return condition
+}
+
+func (m *mockWorkflow) CheckNoError(name string, err error) bool {
+	res := err == nil
+	m.checkResult = res
+	return res
 }
 
 func (m *mockWorkflow) Group(name string, fn func(ctx vuhive.VUContext) error) error {
@@ -143,5 +160,29 @@ func TestInterfaceSegregation_WorkflowController(t *testing.T) {
 
 	failed := controller.Check("test_fail", func() string { return "error" })
 	assert.False(t, failed)
+	assert.False(t, wf.checkResult)
+
+	eqPassed := controller.CheckEqual("eq_pass", 10, 10)
+	assert.True(t, eqPassed)
+	assert.True(t, wf.checkResult)
+
+	eqFailed := controller.CheckEqual("eq_fail", 10, 20)
+	assert.False(t, eqFailed)
+	assert.False(t, wf.checkResult)
+
+	truePassed := controller.CheckTrue("true_pass", true)
+	assert.True(t, truePassed)
+	assert.True(t, wf.checkResult)
+
+	trueFailed := controller.CheckTrue("true_fail", false)
+	assert.False(t, trueFailed)
+	assert.False(t, wf.checkResult)
+
+	noErrPassed := controller.CheckNoError("noerr_pass", nil)
+	assert.True(t, noErrPassed)
+	assert.True(t, wf.checkResult)
+
+	noErrFailed := controller.CheckNoError("noerr_fail", assert.AnError)
+	assert.False(t, noErrFailed)
 	assert.False(t, wf.checkResult)
 }
