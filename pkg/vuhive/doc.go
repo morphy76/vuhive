@@ -63,4 +63,34 @@
 //			// Handle failure or let main return non-zero exit code
 //		}
 //	}
+//
+// Type-Safe State Management:
+//
+// Pass shared initialized state from Setup to VUs using generic accessors (State, MustState, StateOrDefault)
+// or strongly-typed state structs:
+//
+//	type ScenarioState struct {
+//		Client    *http.Client
+//		ServerURL string
+//	}
+//
+//	suite.RegisterScenario("api_test", vuhive.Scenario{
+//		Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
+//			return map[string]any{
+//				"state": &ScenarioState{
+//					Client:    &http.Client{Timeout: 5 * time.Second},
+//					ServerURL: ctx.Param("server_url"),
+//				},
+//			}, nil
+//		},
+//		RunVU: func(ctx vuhive.VUContext) error {
+//			st := vuhive.MustState[*ScenarioState](ctx, "state")
+//			resp, err := st.Client.Get(st.ServerURL + "/health")
+//			if err != nil {
+//				return err
+//			}
+//			defer resp.Body.Close()
+//			return nil
+//		},
+//	})
 package vuhive

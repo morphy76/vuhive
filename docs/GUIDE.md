@@ -126,7 +126,7 @@ func main() {
     vuhive.Run("checkout_flow",
         // RunVU — called repeatedly in a loop per VU during run_period
         func(ctx vuhive.VUContext) error {
-            client := ctx.GlobalState("client").(*http.Client)
+            client := vuhive.MustState[*http.Client](ctx, "client")
             baseURL := ctx.Param("base_url")
 
             start := time.Now()
@@ -184,7 +184,7 @@ suite.RegisterScenario("checkout_flow", vuhive.Scenario{
     // (3) RunVU — called repeatedly in a loop per VU during run_period
     RunVU: func(ctx vuhive.VUContext) error {
         baseURL := ctx.Param("base_url")
-        client := ctx.GlobalState("client").(*http.Client)
+        client := vuhive.MustState[*http.Client](ctx, "client")
 
         start := time.Now()
         req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/health", nil)
@@ -469,10 +469,77 @@ If `RunVU` panics, the framework:
 ### GlobalState contract & Thread Safety
 
 - Setup returns `map[string]any` → the framework makes a **shallow copy** of this map before starting VUs.
-- All VUs share the **same copied map** (read-only) via `ctx.GlobalState(key)`.
+- All VUs share the **same copied map** (read-only) via `ctx.GlobalState(key)` or the generic state accessors (`vuhive.State`, `vuhive.MustState`, `vuhive.StateOrDefault`).
 - **Shallow Copy Limitation**: The shallow copy protects the top-level map keys from mutation, but does **not** perform a deep copy of nested mutable objects (e.g., slices, inner maps, pointer structures).
 - **Thread Safety Invariant**: If `Setup` returns complex nested structures or pointers, they must be treated as **immutable** by all VUs, or access must be protected using standard Go concurrency primitives (`sync.Mutex`, `sync.RWMutex`, atomic values, or thread-safe types like `sync.Map`).
 - **Do not mutate** shared state from VU code without synchronization.
+
+### Type-Safe Generic State Accessors
+
+To eliminate panic-prone raw type assertions (such as `ctx.GlobalState("client").(*http.Client)`) and gain full compile-time type safety and IDE autocompletion, use vuhive's generic state accessors:
+
+- **`vuhive.State[T](sp StateProvider, key string) (T, bool)`**: Retrieves typed value from `VUContext` or `TeardownContext`. Returns zero value and `false` if the key is missing or has an incompatible type.
+- **`vuhive.MustState[T](sp StateProvider, key string) T`**: Retrieves typed value and panics with a descriptive error message if missing or invalid type.
+- **`vuhive.StateOrDefault[T](sp StateProvider, key string, defaultValue T) T`**: Retrieves typed value, returning `defaultValue` if the key is missing or incompatible.
+
+```go
+RunVU: func(ctx vuhive.VUContext) error {
+    // Comma-ok pattern:
+    client, ok := vuhive.State[*http.Client](ctx, "client")
+    if !ok {
+        return errors.New("http client missing from global state")
+    }
+
+    // Must pattern:
+    token := vuhive.MustState[string](ctx, "auth_token")
+
+    // Default fallback pattern:
+    serverURL := vuhive.StateOrDefault(ctx, "server_url", "http://localhost:8080")
+    // ...
+    return nil
+}
+```
+
+#### Best Practice: Strongly-Typed State Struct
+
+For clean and maintainable scenario setups, encapsulate all scenario dependencies into a single strongly-typed struct:
+
+```go
+type ScenarioState struct {
+    Client    *http.Client
+    ServerURL string
+    UserDS    *data.DataSet
+}
+
+// In Setup:
+Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
+    ds, err := data.LoadCSVFile("testdata/users.csv", data.Sequential)
+    if err != nil {
+        return nil, err
+    }
+    return map[string]any{
+        "state": &ScenarioState{
+            Client:    &http.Client{Timeout: 5 * time.Second},
+            ServerURL: ctx.Param("server_url"),
+            UserDS:    ds,
+        },
+    }, nil
+}
+
+// In RunVU:
+RunVU: func(ctx vuhive.VUContext) error {
+    st := vuhive.MustState[*ScenarioState](ctx, "state")
+    
+    // Complete compiler safety and IDE autocompletion:
+    user, err := st.UserDS.Next(ctx)
+    if err != nil {
+        return err
+    }
+    resp, err := st.Client.Get(st.ServerURL + "/users/" + user["id"])
+    // ...
+    return nil
+}
+```
 
 ---
 
@@ -1033,7 +1100,7 @@ suite.RegisterScenario("custom_sdk_load_test", vuhive.Scenario{
     },
 
     RunVU: func(ctx vuhive.VUContext) error {
-        sdk := ctx.GlobalState("sdk").(*customsdk.Client)
+        sdk := vuhive.MustState[*customsdk.Client](ctx, "sdk")
 
         // Requests executed with ctx automatically record duration, count, and failure rates
         return sdk.CallAPI(ctx, "items/search")
@@ -1107,7 +1174,7 @@ func main() {
 		},
 
 		RunVU: func(ctx vuhive.VUContext) error {
-			client := ctx.GlobalState("kafka").(kafka.Client)
+			client := vuhive.MustState[kafka.Client](ctx, "kafka")
 
 			// 1. Publish message record — auto-records pub_duration, pub_total, pub_bytes, pub_failed
 			msg := &kafka.Message{
@@ -1167,7 +1234,7 @@ Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
 },
 
 RunVU: func(ctx vuhive.VUContext) error {
-    ds := ctx.GlobalState("dataset").(*data.DataSet)
+    ds := vuhive.MustState[*data.DataSet](ctx, "dataset")
     record, err := ds.Next(ctx)
     if err != nil {
         return err

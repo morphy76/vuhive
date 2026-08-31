@@ -60,8 +60,8 @@ func main() {
 		// RunVU is invoked repeatedly by each Virtual User for every load iteration during run_period.
 		RunVU: func(ctx vuhive.VUContext) error {
 			// Step 1: Retrieve shared instrumented client and configuration from GlobalState and YAML params
-			client := ctx.GlobalState("client").(*http.Client)
-			serverURL := ctx.GlobalState("server_url").(string)
+			client := vuhive.MustState[*http.Client](ctx, "client")
+			serverURL := vuhive.MustState[string](ctx, "server_url")
 
 			checkoutPath := ctx.Param("checkout_path")
 			if checkoutPath == "" {

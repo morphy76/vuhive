@@ -66,8 +66,8 @@ func main() {
 		},
 
 		RunVU: func(ctx vuhive.VUContext) error {
-			client := ctx.GlobalState("client").(*http.Client)
-			serverURL := ctx.GlobalState("server_url").(string)
+			client := vuhive.MustState[*http.Client](ctx, "client")
+			serverURL := vuhive.MustState[string](ctx, "server_url")
 
 			// Step 1: Top-level transaction group for user authentication
 			err := ctx.Group("01_Login", func(ctx vuhive.VUContext) error {

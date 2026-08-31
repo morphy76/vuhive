@@ -69,8 +69,8 @@ func main() {
 
 		// RunVU: Produce event, validate, then consume and commit
 		RunVU: func(ctx vuhive.VUContext) error {
-			client := ctx.GlobalState("kafka_client").(kafka.Client)
-			topic := ctx.GlobalState("topic").(string)
+			client := vuhive.MustState[kafka.Client](ctx, "kafka_client")
+			topic := vuhive.MustState[string](ctx, "topic")
 
 			// Step 1: Publish an event record
 			orderID := fmt.Sprintf("order-%d-%d", ctx.VUID(), ctx.Iteration())

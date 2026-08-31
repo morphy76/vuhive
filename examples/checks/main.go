@@ -50,8 +50,8 @@ func main() {
 
 		RunVU: func(ctx vuhive.VUContext) error {
 			// Step 1: Extract client and server URL from global state
-			client := ctx.GlobalState("client").(*http.Client)
-			serverURL := ctx.GlobalState("server_url").(string)
+			client := vuhive.MustState[*http.Client](ctx, "client")
+			serverURL := vuhive.MustState[string](ctx, "server_url")
 
 			// Step 2: Execute HTTP request
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/api/resource", nil)

@@ -67,8 +67,8 @@ func main() {
 		},
 
 		RunVU: func(ctx vuhive.VUContext) error {
-			client := ctx.GlobalState("client").(*http.Client)
-			serverURL := ctx.GlobalState("server_url").(string)
+			client := vuhive.MustState[*http.Client](ctx, "client")
+			serverURL := vuhive.MustState[string](ctx, "server_url")
 
 			// Update active concurrent operations gauge metric
 			ctx.Metrics().Gauge("concurrent_operations", vuhive.Tags{}).Set(float64(ctx.VUID()))
