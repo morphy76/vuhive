@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"bufio"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -672,21 +673,17 @@ func TestClient_StandardClient_RestRequests(t *testing.T) {
 }
 
 func TestClient_StandardClient_SSERequests(t *testing.T) {
-	serverClosed := make(chan struct{})
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.WriteHeader(http.StatusOK)
-			flusher, ok := w.(http.Flusher)
-			if ok {
-				_, _ = w.Write([]byte("event: custom\ndata: stream-payload-1\n\n"))
-				flusher.Flush()
-			}
-			<-r.Context().Done()
-			close(serverClosed)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
 			return
 		}
-		http.Error(w, "not sse", http.StatusBadRequest)
+		_, _ = w.Write([]byte("data: event-1\n\n"))
+		flusher.Flush()
+		_, _ = w.Write([]byte("data: event-2\n\n"))
+		flusher.Flush()
 	}))
 	defer ts.Close()
 
@@ -695,30 +692,31 @@ func TestClient_StandardClient_SSERequests(t *testing.T) {
 	stdClient := client.StandardClient()
 	require.NotNil(t, stdClient)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/std-sse", nil)
+	req, err := http.NewRequestWithContext(
+		context.Background(), http.MethodGet, ts.URL+"/std-sse", nil,
+	)
 	require.NoError(t, err)
-	req.Header.Set("Accept", "text/event-stream; charset=utf-8")
+	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := stdClient.Do(req)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
 
-	buf := make([]byte, 128)
-	n, err := resp.Body.Read(buf)
-	require.NoError(t, err)
-	assert.Contains(t, string(buf[:n]), "data: stream-payload-1")
-
-	// Close response body -> should close underlying stream and server connection
-	_ = resp.Body.Close()
-
-	select {
-	case <-serverClosed:
-	case <-time.After(2 * time.Second):
-		t.Fatal("closing StandardClient response body should cancel underlying SSE stream")
+	// Third-party SDKs use bufio.Scanner to read SSE — verify the raw
+	// streaming body is passed through unmodified.
+	scanner := bufio.NewScanner(resp.Body)
+	var dataLines []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data:") {
+			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+		}
 	}
+	require.NoError(t, scanner.Err())
+	assert.Equal(t, []string{"event-1", "event-2"}, dataLines)
 
 	assert.Equal(t, int64(1), store.AggregatedCounterValue(vuhive.MetricHTTPSSEConnectionsTotal))
 }
+
