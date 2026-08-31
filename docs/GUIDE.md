@@ -48,31 +48,19 @@ Create `main.go`:
 package main
 
 import (
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/morphy76/vuhive/pkg/vuhive"
 )
 
 func main() {
-	suite := vuhive.NewSuite("My First Load Test")
-
-	suite.RegisterScenario("hello", vuhive.Scenario{
-		RunVU: func(ctx vuhive.VUContext) error {
-			start := time.Now()
-			time.Sleep(10 * time.Millisecond) // replace with real work
-			ctx.Metrics().Duration("response_time", vuhive.Tags{}).Observe(time.Since(start))
-			ctx.Metrics().Counter("requests", vuhive.Tags{}).Inc()
-			return nil
-		},
+	vuhive.Run("hello", func(ctx vuhive.VUContext) error {
+		start := time.Now()
+		time.Sleep(10 * time.Millisecond) // replace with real work
+		ctx.Metrics().Duration("response_time", vuhive.Tags{}).Observe(time.Since(start))
+		ctx.Metrics().Counter("requests", vuhive.Tags{}).Inc()
+		return nil
 	})
-
-	res := suite.Execute()
-	if res.Error != nil {
-		fmt.Fprintf(os.Stderr, "Execution error: %v\n", res.Error)
-	}
-	os.Exit(res.ExitCode())
 }
 ```
 
@@ -129,9 +117,57 @@ my-load-test/
 
 ## 3. Writing Your First Scenario
 
-A scenario is a struct with up to 6 lifecycle hooks. Only `RunVU` is required:
+### Option A: Single-Scenario Shorthand (`vuhive.Run`)
+
+For minimal single-scenario tests, use `vuhive.Run` to avoid suite instantiation boilerplate:
 
 ```go
+func main() {
+    vuhive.Run("checkout_flow",
+        // RunVU — called repeatedly in a loop per VU during run_period
+        func(ctx vuhive.VUContext) error {
+            client := ctx.GlobalState("client").(*http.Client)
+            baseURL := ctx.Param("base_url")
+
+            start := time.Now()
+            req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/health", nil)
+            resp, err := client.Do(req)
+            if err != nil {
+                ctx.Metrics().Counter("errors", vuhive.Tags{}).Inc()
+                return err
+            }
+            defer func() { _ = resp.Body.Close() }()
+
+            ctx.Metrics().Duration("http_latency", vuhive.Tags{"endpoint": "/health"}).Observe(time.Since(start))
+            ctx.Metrics().Counter("requests", vuhive.Tags{"status": fmt.Sprint(resp.StatusCode)}).Inc()
+            return nil
+        },
+        // Optional lifecycle hooks via functional options:
+        vuhive.WithSetup(func(ctx vuhive.SetupContext) (map[string]any, error) {
+            return map[string]any{"client": &http.Client{Timeout: 5 * time.Second}}, nil
+        }),
+        vuhive.WithTeardown(func(ctx vuhive.TeardownContext, state map[string]any) error {
+            ctx.Log().Info().Msg("cleaning up shared resources")
+            return nil
+        }),
+    )
+}
+```
+
+Available functional options include:
+- `vuhive.WithSetup(fn)`
+- `vuhive.WithPreTest(fn)`
+- `vuhive.WithAfterTest(fn)`
+- `vuhive.WithTeardown(fn)`
+- `vuhive.WithSummary(fn)`
+
+### Option B: Multi-Scenario Suites (`vuhive.NewSuite`)
+
+When registering multiple scenarios within a single binary, construct a `vuhive.Suite` and register scenarios explicitly:
+
+```go
+suite := vuhive.NewSuite("E-Commerce Load Tests")
+
 suite.RegisterScenario("checkout_flow", vuhive.Scenario{
     // (1) Setup — runs ONCE before any VU spawns
     Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
@@ -165,7 +201,6 @@ suite.RegisterScenario("checkout_flow", vuhive.Scenario{
             _ = resp.Body.Close()
         }()
 
-
         ctx.Metrics().Counter("requests", vuhive.Tags{"status": fmt.Sprint(resp.StatusCode)}).Inc()
         return nil
     },
@@ -188,6 +223,9 @@ suite.RegisterScenario("checkout_flow", vuhive.Scenario{
         return nil
     },
 })
+
+res := suite.Execute()
+os.Exit(res.ExitCode())
 ```
 
 

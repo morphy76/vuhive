@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"time"
 
 	"github.com/morphy76/vuhive/pkg/vuhive"
@@ -38,20 +37,10 @@ func main() {
 	ts := startMockCheckoutServer()
 	defer ts.Close()
 
-	// 2. Initialize vuhive suite
-	suite := vuhive.NewSuite("HTTP Module Demo Suite")
-
-	// 3. Register scenario using the built-in HTTP module
-	suite.RegisterScenario("http_module_demo", vuhive.Scenario{
-		// Setup: optional scenario lifecycle hook (e.g. sharing dynamic runtime state)
-		Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
-			return map[string]any{
-				"server_url": ts.URL,
-			}, nil
-		},
-
+	// 2. Execute single scenario using the streamlined vuhive.Run shorthand with lifecycle options
+	vuhive.Run("http_module_demo",
 		// RunVU: execute HTTP requests with automatic instrumentation
-		RunVU: func(ctx vuhive.VUContext) error {
+		func(ctx vuhive.VUContext) error {
 			// Step 1: Retrieve scenario's default instrumented HTTP client (zero Setup boilerplate)
 			client := vuhivehttp.Default(ctx)
 			serverURL := ctx.GlobalState("server_url").(string)
@@ -90,17 +79,16 @@ func main() {
 
 			return nil
 		},
-
-		Teardown: func(ctx vuhive.TeardownContext, _ map[string]any) error {
+		// Setup: optional scenario lifecycle hook (e.g. sharing dynamic runtime state)
+		vuhive.WithSetup(func(ctx vuhive.SetupContext) (map[string]any, error) {
+			return map[string]any{
+				"server_url": ts.URL,
+			}, nil
+		}),
+		// Teardown: optional scenario lifecycle hook executed after all VUs exit
+		vuhive.WithTeardown(func(ctx vuhive.TeardownContext, _ map[string]any) error {
 			ctx.Log().Info().Msg("HTTP module demo completed")
 			return nil
-		},
-	})
-
-	// 4. Execute and exit
-	res := suite.Execute()
-	if res.Error != nil {
-		fmt.Fprintf(os.Stderr, "Execution error: %v\n", res.Error)
-	}
-	os.Exit(res.ExitCode())
+		}),
+	)
 }

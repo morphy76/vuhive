@@ -32,9 +32,51 @@ go get github.com/morphy76/vuhive
 
 ---
 
+## Quick Start (Single Scenario)
+
+For focused benchmarks and single-scenario tests, `vuhive.Run` eliminates boilerplate ceremonies by executing the scenario with CLI arguments and calling `os.Exit` with the appropriate exit code:
+
+```go
+package main
+
+import (
+	"github.com/morphy76/vuhive/pkg/vuhive"
+	vuhivehttp "github.com/morphy76/vuhive/pkg/vuhive/http"
+)
+
+func main() {
+	vuhive.Run("http_checkout", func(ctx vuhive.VUContext) error {
+		_, err := vuhivehttp.Default(ctx).Get(ctx, "/checkout")
+		return err
+	})
+}
+```
+
+Optional lifecycle hooks can be passed via functional options (`WithSetup`, `WithPreTest`, `WithAfterTest`, `WithTeardown`, `WithSummary`):
+
+```go
+func main() {
+	vuhive.Run("http_checkout",
+		func(ctx vuhive.VUContext) error {
+			client := ctx.GlobalState("client").(*http.Client)
+			// ...
+			return nil
+		},
+		vuhive.WithSetup(func(ctx vuhive.SetupContext) (map[string]any, error) {
+			return map[string]any{"client": &http.Client{}}, nil
+		}),
+		vuhive.WithTeardown(func(ctx vuhive.TeardownContext, state map[string]any) error {
+			return nil
+		}),
+	)
+}
+```
+
+---
+
 ## Core Facilities & Lifecycle Hooks
 
-Test suites are created using `vuhive.NewSuite("Suite Name")`. Each scenario registers up to 6 lifecycle hooks:
+For complex load testing with multiple registered scenarios, create a suite using `vuhive.NewSuite("Suite Name")`. Each scenario registers up to 6 lifecycle hooks:
 
 ```go
 type Scenario struct {
