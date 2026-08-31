@@ -362,6 +362,13 @@ func (c *scenarioContext) Metrics() metric.Collector {
 	return c.metrics
 }
 
+func (c *scenarioContext) Value(key any) any {
+	if key == "vuhive.metrics" {
+		return c.metrics
+	}
+	return c.Context.Value(key)
+}
+
 func (c *scenarioContext) Sleep(d ...time.Duration) error {
 	var duration time.Duration
 	if len(d) > 0 {

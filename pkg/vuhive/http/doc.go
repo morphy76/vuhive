@@ -1,9 +1,9 @@
-// Package http provides an instrumented HTTP client for the vuhive load testing framework.
+// Package http provides an instrumented HTTP client and middleware for the vuhive load testing framework.
 //
-// The Client automatically records latency, status code counters, and error rates for
+// The Client and Instrument wrapper automatically record latency, status code counters, and error rates for
 // every request, eliminating boilerplate metric recording from RunVU hooks.
 //
-// Basic usage:
+// Basic usage (built-in Client):
 //
 //	// In Setup: create a shared instrumented client
 //	client := vuhivehttp.NewClient(ctx,
@@ -20,6 +20,20 @@
 //	if err := resp.JSON(&result); err != nil {
 //	    return err
 //	}
+//
+// Wrapping standard *http.Client & Third-Party SDKs (vuhivehttp.Instrument):
+//
+//	// In Setup: instrument any pre-configured standard *http.Client or SDK
+//	baseClient := &http.Client{Timeout: 5 * time.Second}
+//	client := vuhivehttp.Instrument(baseClient, vuhivehttp.WithMetricPrefix("vuhive.http."))
+//
+//	// In RunVU: execute standard http requests — telemetry is recorded dynamically from context
+//	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example.com/data", nil)
+//	resp, err := client.Do(req)
+//	if err != nil {
+//	    return err
+//	}
+//	defer resp.Body.Close()
 //
 // Server-Sent Events (SSE) streaming usage:
 //
@@ -51,7 +65,7 @@
 //   - vuhive.http.sse.stream_duration (Duration): total active lifespan of stream session
 //   - vuhive.http.sse.errors_total (Counter): stream disconnections, read errors, or framing errors
 //
-// Opt-in phase-breakdown metrics (enabled via WithDetailedTiming):
+// Opt-in phase-breakdown metrics (enabled via WithDetailedTiming or WithInstrumentDetailedTiming):
 //   - vuhive.http.req_connecting (Duration): TCP connection establishment time
 //   - vuhive.http.req_tls_handshaking (Duration): TLS handshake time
 //   - vuhive.http.req_sending (Duration): request write time

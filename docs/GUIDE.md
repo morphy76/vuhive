@@ -972,6 +972,42 @@ RunVU: func(ctx vuhive.VUContext) error {
 - **Zero-Boilerplate Telemetry**: Full `vuhive.http.*` and `vuhive.http.sse.*` metrics are collected without requiring custom adapters.
 - **Safe Socket Cleanup**: When the SDK calls `resp.Body.Close()`, the underlying `SSEStream` is immediately terminated.
 
+#### Wrapping Existing Standard `*http.Client` & `http.RoundTripper` (`vuhivehttp.Instrument`)
+
+When bringing your own pre-configured `*http.Client` (e.g. AWS SDK, Google Cloud Client, Stripe, custom OAuth2 or mTLS clients), use `vuhivehttp.Instrument()` or `vuhivehttp.InstrumentTransport()` to wrap your client with automatic `vuhive` telemetry. Metrics are extracted dynamically per request from `req.Context()`:
+
+```go
+suite.RegisterScenario("custom_sdk_load_test", vuhive.Scenario{
+    Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
+        // 1. Create your pre-configured standard client (e.g. with custom timeouts, transport, or TLS)
+        baseClient := &http.Client{Timeout: 5 * time.Second}
+
+        // 2. Wrap it with vuhive telemetry instrumentation
+        instrumented := vuhivehttp.Instrument(
+            baseClient,
+            vuhivehttp.WithMetricPrefix("vuhive.http."),
+            vuhivehttp.WithTags(vuhive.Tags{"env": "staging"}),
+        )
+
+        // 3. Initialize third-party SDK using the instrumented client
+        awsClient := customsdk.New(instrumented)
+        return map[string]any{"sdk": awsClient}, nil
+    },
+
+    RunVU: func(ctx vuhive.VUContext) error {
+        sdk := ctx.GlobalState("sdk").(*customsdk.Client)
+
+        // Requests executed with ctx automatically record duration, count, and failure rates
+        return sdk.CallAPI(ctx, "items/search")
+    },
+})
+```
+
+##### Supported Instrumentation Options:
+- `vuhivehttp.WithMetricPrefix(prefix string)`: Sets the metric name prefix (defaults to `"vuhive.http."`).
+- `vuhivehttp.WithInstrumentDetailedTiming(enabled ...bool)`: Enables collection of `httptrace` phase timings (`req_connecting`, `req_tls_handshaking`, `req_sending`).
+- `vuhivehttp.WithTags(tags vuhive.Tags)`: Attaches static default tags to all metric observations from this client.
+
 #### Auto-Recorded HTTP & SSE Metrics
 
 

@@ -221,6 +221,13 @@ func (a *publicSetupContextAdapter) Metrics() MetricsCollector {
 	return &a.metricsAdapter
 }
 
+func (a *publicSetupContextAdapter) Value(key any) any {
+	if key == "vuhive.metrics" {
+		return a.Metrics()
+	}
+	return a.SetupContext.Value(key)
+}
+
 func (a *publicSetupContextAdapter) HTTPConfig() HTTPConfig {
 	return convertEngineHTTPConfig(a.SetupContext.HTTPConfig())
 }
@@ -250,6 +257,13 @@ func (a *publicVUContextAdapter) Log() Logger {
 
 func (a *publicVUContextAdapter) Metrics() MetricsCollector {
 	return &a.metricsAdapter
+}
+
+func (a *publicVUContextAdapter) Value(key any) any {
+	if key == "vuhive.metrics" {
+		return a.Metrics()
+	}
+	return a.VUContext.Value(key)
 }
 
 func (a *publicVUContextAdapter) HTTPConfig() HTTPConfig {
@@ -301,6 +315,13 @@ func (a *publicTeardownContextAdapter) Metrics() MetricsCollector {
 	return &a.metricsAdapter
 }
 
+func (a *publicTeardownContextAdapter) Value(key any) any {
+	if key == "vuhive.metrics" {
+		return a.Metrics()
+	}
+	return a.TeardownContext.Value(key)
+}
+
 func (a *publicTeardownContextAdapter) HTTPConfig() HTTPConfig {
 	return convertEngineHTTPConfig(a.TeardownContext.HTTPConfig())
 }
@@ -321,6 +342,13 @@ func (a *publicSummaryContextAdapter) Log() Logger {
 
 func (a *publicSummaryContextAdapter) Metrics() MetricsCollector {
 	return &a.metricsAdapter
+}
+
+func (a *publicSummaryContextAdapter) Value(key any) any {
+	if key == "vuhive.metrics" {
+		return a.Metrics()
+	}
+	return a.SummaryContext.Value(key)
 }
 
 func (a *publicSummaryContextAdapter) HTTPConfig() HTTPConfig {

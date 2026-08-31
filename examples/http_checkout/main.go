@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/morphy76/vuhive/pkg/vuhive"
+	vuhivehttp "github.com/morphy76/vuhive/pkg/vuhive/http"
 )
 
 // startMockCheckoutServer launches an in-process HTTP test server simulating a checkout backend API.
@@ -38,10 +39,11 @@ func main() {
 		// Best practice: Initialize shared reusable resources (HTTP clients with connection pooling,
 		// auth tokens, datasets) here and return them in the state map.
 		Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
-			// Configure an HTTP client with connection pooling for high-throughput load generation
-			client := &http.Client{
+			// Configure a standard HTTP client and wrap it with vuhive telemetry instrumentation
+			baseClient := &http.Client{
 				Timeout: 2 * time.Second,
 			}
+			client := vuhivehttp.Instrument(baseClient)
 			return map[string]any{
 				"client":     client,
 				"server_url": ts.URL,
@@ -57,7 +59,7 @@ func main() {
 
 		// RunVU is invoked repeatedly by each Virtual User for every load iteration during run_period.
 		RunVU: func(ctx vuhive.VUContext) error {
-			// Step 1: Retrieve shared client and configuration from GlobalState and YAML params
+			// Step 1: Retrieve shared instrumented client and configuration from GlobalState and YAML params
 			client := ctx.GlobalState("client").(*http.Client)
 			serverURL := ctx.GlobalState("server_url").(string)
 
@@ -67,31 +69,22 @@ func main() {
 			}
 
 			// Step 2: Construct the HTTP request with VU context to respect iteration timeouts (vu_timeout)
-			start := time.Now()
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+checkoutPath, nil)
 			if err != nil {
-				ctx.Metrics().Rate("checkout_success_rate", vuhive.Tags{}).Add(0, 1)
 				return fmt.Errorf("failed to create request: %w", err)
 			}
 
-			// Step 3: Execute the HTTP request and record HDR duration histogram latency
+			// Step 3: Execute the HTTP request — metrics (req_duration, reqs, req_failed)
+			// are automatically recorded to vuhive telemetry via the instrumented transport
 			resp, err := client.Do(req)
-			elapsed := time.Since(start)
-
-			ctx.Metrics().Duration("http_request_duration", vuhive.Tags{"path": checkoutPath}).Observe(elapsed)
-
-			// Step 4: Validate HTTP response and record custom rate and counter metrics
-			if err != nil || resp.StatusCode != http.StatusOK {
-				ctx.Metrics().Rate("checkout_success_rate", vuhive.Tags{}).Add(0, 1)
-				if resp != nil {
-					_ = resp.Body.Close()
-				}
-				return fmt.Errorf("http request failed with status %d: %v", resp.StatusCode, err)
+			if err != nil {
+				return fmt.Errorf("http request failed: %w", err)
 			}
-			_ = resp.Body.Close()
+			defer resp.Body.Close()
 
-			ctx.Metrics().Rate("checkout_success_rate", vuhive.Tags{}).Add(1, 1)
-			ctx.Metrics().Counter("http_requests_total", vuhive.Tags{"status": "200"}).Inc()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("http request failed with status %d", resp.StatusCode)
+			}
 			return nil
 		},
 
