@@ -59,7 +59,7 @@ func TestInstrument_StandardRequest_RecordsMetrics(t *testing.T) {
 
 	resp, err := instrumentedClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestInstrument_ErrorResponse_RecordsFailedRateAndCounter(t *testing.T) {
 
 	resp, err := instrumentedClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
@@ -147,7 +147,7 @@ func TestInstrument_CustomMetricPrefixAndTags(t *testing.T) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, int64(1), store.AggregatedCounterValue(customPrefix+"reqs"))
 	snap := store.MergedHistogramSnapshot(customPrefix + "req_duration")
@@ -213,7 +213,7 @@ func TestInstrument_NonVUContext_ExecutesWithoutPanics(t *testing.T) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -240,7 +240,7 @@ func TestInstrument_WrappedContext_Timeout_ExtractsMetrics(t *testing.T) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, int64(1), store.AggregatedCounterValue("vuhive.http.reqs"))
 }
@@ -270,8 +270,7 @@ func TestInstrumentTransport_DirectRoundTrip(t *testing.T) {
 
 	resp, err := transport.RoundTrip(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, int64(1), store.AggregatedCounterValue("vuhive.http.reqs"))
 }
-
