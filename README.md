@@ -147,6 +147,9 @@ Adhering to the **Interface Segregation Principle (ISP)**, vuhive provides role-
 | `ctx.Metrics()` | `ObservabilityProvider` | `MetricsCollector` for recording custom counters, gauges, durations, and rates. |
 | `ctx.Sleep(d ...time.Duration)` | `WorkflowController` | Pauses for explicit duration or configured `interaction_delay` strategy (respects `ctx.Done()`). |
 | `ctx.Check(name, fn)` | `WorkflowController` | Evaluates inline pass/fail assertion (`CheckFunc`) without stopping VU iteration execution. |
+| `ctx.CheckEqual(name, actual, expected)` | `WorkflowController` | Asserts `actual == expected` with zero allocations on pass. |
+| `ctx.CheckTrue(name, condition, [reason])` | `WorkflowController` | Asserts boolean condition is true. |
+| `ctx.CheckNoError(name, err)` | `WorkflowController` | Asserts error is `nil`. |
 | `ctx.Group(name, fn)` | `WorkflowController` | Executes `fn` within a named transaction boundary with automatic latency recording (`vuhive.group.<path>.duration`). |
 
 ### Type-Safe Generic State Accessors
@@ -174,7 +177,18 @@ RunVU: func(ctx vuhive.VUContext) error {
 Inline assertions allow developers to validate real-time pass/fail conditions inside `RunVU` without terminating the iteration:
 
 ```go
-ctx.Check("status code is 200", func() string {
+// Option A: Ergonomic context methods (zero allocations on pass)
+ctx.CheckEqual("status_200", resp.StatusCode, http.StatusOK)
+ctx.CheckTrue("order_id_exists", result.OrderID != "")
+ctx.CheckNoError("no_transport_error", err)
+
+// Option B: Composable assertion generators
+ctx.Check("status_200", vuhive.Equal(resp.StatusCode, 200))
+ctx.Check("content_type", vuhive.Contains(resp.Header.Get("Content-Type"), "application/json"))
+ctx.Check("duration_in_sla", vuhive.InRange(elapsed.Milliseconds(), 0, 500))
+
+// Option C: Custom closures
+ctx.Check("custom_business_rule", func() string {
     if resp.StatusCode != http.StatusOK {
         return fmt.Sprintf("expected 200, got %d", resp.StatusCode)
     }
@@ -182,7 +196,8 @@ ctx.Check("status code is 200", func() string {
 })
 ```
 
-- **Pass/Fail Contract**: Return `""` (empty string) for pass (`true`); return non-empty failure reason string for fail (`false`).
+- **Assertion Generators**: Standard helpers in `pkg/vuhive`: `Equal[T]`, `True`, `NoError`, `Contains`, and `InRange[T]`.
+- **Pass/Fail Contract**: Custom check functions return `""` (empty string) for pass (`true`); return non-empty failure reason string for fail (`false`).
 - **Auto-Instrumentation**: Automatically increments built-in counters `vuhive.checks.passed` and `vuhive.checks.failed` tagged with `name`.
 - **Reporting & Thresholds**: Per-check pass/fail counts and percentages are displayed in console and JSON reports. SLA thresholds can target check metrics (e.g. `vuhive.checks.failed count == 0`).
 
@@ -560,7 +575,7 @@ RunVU: func(ctx vuhive.VUContext) error {
         }
     }
 
-    ctx.Check("received_tokens", tokens > 0)
+    ctx.CheckTrue("received_tokens", tokens > 0)
     return stream.Err()
 }
 ```

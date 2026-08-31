@@ -438,6 +438,9 @@ func (m *mockVUContext) ScenarioName() string                                   
 func (m *mockVUContext) GlobalState(key string) any                                   { return nil }
 func (m *mockVUContext) Sleep(d ...time.Duration) error                               { return nil }
 func (m *mockVUContext) Check(name string, fn vuhive.CheckFunc) bool                  { return true }
+func (m *mockVUContext) CheckEqual(name string, actual, expected any) bool             { return true }
+func (m *mockVUContext) CheckTrue(name string, condition bool, failureReason ...string) bool { return condition }
+func (m *mockVUContext) CheckNoError(name string, err error) bool                      { return err == nil }
 func (m *mockVUContext) Group(name string, fn func(ctx vuhive.VUContext) error) error { return fn(m) }
 
 func TestNewClientFromConfig_FullDeclarativeConfig(t *testing.T) {

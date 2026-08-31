@@ -467,6 +467,63 @@ func TestScenarioContext_HTTPConfig(t *testing.T) {
 	})
 }
 
+func TestScenarioContext_CheckConvenienceMethods(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, zerolog.WarnLevel)
+	metrics := metric.NewStore()
+
+	sCtx := engine.NewScenarioContext(context.Background(), 1, 0, config.ScenarioConfig{}, "test_scenario", nil, logger, metrics)
+
+	t.Run("CheckEqual primitive types", func(t *testing.T) {
+		pass := sCtx.CheckEqual("eq_pass", 200, 200)
+		fail := sCtx.CheckEqual("eq_fail", 404, 200)
+
+		assert.True(t, pass)
+		assert.False(t, fail)
+		assert.Contains(t, buf.String(), `"check":"eq_fail"`)
+		assert.Contains(t, buf.String(), `expected 200, got 404`)
+	})
+
+	t.Run("CheckEqual slice/map deep equality", func(t *testing.T) {
+		pass := sCtx.CheckEqual("slice_pass", []string{"a", "b"}, []string{"a", "b"})
+		fail := sCtx.CheckEqual("slice_fail", []string{"a"}, []string{"b"})
+
+		assert.True(t, pass)
+		assert.False(t, fail)
+	})
+
+	t.Run("CheckTrue", func(t *testing.T) {
+		pass := sCtx.CheckTrue("true_pass", 10 > 5)
+		fail := sCtx.CheckTrue("true_fail", 5 > 10, "5 is not greater than 10")
+
+		assert.True(t, pass)
+		assert.False(t, fail)
+		assert.Contains(t, buf.String(), `"check":"true_fail"`)
+		assert.Contains(t, buf.String(), `5 is not greater than 10`)
+	})
+
+	t.Run("CheckNoError", func(t *testing.T) {
+		pass := sCtx.CheckNoError("noerr_pass", nil)
+		fail := sCtx.CheckNoError("noerr_fail", assert.AnError)
+
+		assert.True(t, pass)
+		assert.False(t, fail)
+		assert.Contains(t, buf.String(), `"check":"noerr_fail"`)
+		assert.Contains(t, buf.String(), `unexpected error`)
+	})
+
+	t.Run("nil metrics and nil logger fallback", func(t *testing.T) {
+		bareCtx := engine.NewScenarioContext(context.Background(), 1, 0, config.ScenarioConfig{}, "test_scenario", nil, nil, nil)
+		assert.True(t, bareCtx.CheckEqual("eq", 1, 1))
+		assert.False(t, bareCtx.CheckEqual("eq_fail", 1, 2))
+		assert.True(t, bareCtx.CheckTrue("t", true))
+		assert.False(t, bareCtx.CheckTrue("t_fail", false))
+		assert.True(t, bareCtx.CheckNoError("e", nil))
+		assert.False(t, bareCtx.CheckNoError("e_fail", assert.AnError))
+	})
+}
+
+
 
 
 

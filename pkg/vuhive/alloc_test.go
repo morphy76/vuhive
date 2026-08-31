@@ -38,12 +38,31 @@ func TestAlloc_PublicVUContext_Check(t *testing.T) {
 
 	// Warm-up check cache
 	capturedCtx.Check("status_200", func() string { return "" })
+	capturedCtx.CheckEqual("check_eq", 200, 200)
+	capturedCtx.CheckTrue("check_true", true)
+	capturedCtx.CheckNoError("check_noerror", nil)
 
-	allocs := testing.AllocsPerRun(1000, func() {
+	allocsCheck := testing.AllocsPerRun(1000, func() {
 		_ = capturedCtx.Check("status_200", func() string { return "" })
 	})
+	assert.Equal(t, float64(0), allocsCheck, "Public VUContext.Check must produce 0 heap allocations")
 
-	assert.Equal(t, float64(0), allocs, "Public VUContext.Check must produce 0 heap allocations")
+	actualCode := 200
+	expectedCode := 200
+	allocsCheckEqual := testing.AllocsPerRun(1000, func() {
+		_ = capturedCtx.CheckEqual("check_eq", actualCode, expectedCode)
+	})
+	assert.Equal(t, float64(0), allocsCheckEqual, "Public VUContext.CheckEqual must produce 0 heap allocations")
+
+	allocsCheckTrue := testing.AllocsPerRun(1000, func() {
+		_ = capturedCtx.CheckTrue("check_true", true)
+	})
+	assert.Equal(t, float64(0), allocsCheckTrue, "Public VUContext.CheckTrue must produce 0 heap allocations")
+
+	allocsCheckNoError := testing.AllocsPerRun(1000, func() {
+		_ = capturedCtx.CheckNoError("check_noerror", nil)
+	})
+	assert.Equal(t, float64(0), allocsCheckNoError, "Public VUContext.CheckNoError must produce 0 heap allocations")
 }
 
 func TestAlloc_PublicVUContext_ParamAccess(t *testing.T) {

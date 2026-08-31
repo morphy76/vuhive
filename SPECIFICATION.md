@@ -289,6 +289,18 @@ type WorkflowController interface {
 
     // Check evaluates an inline pass/fail assertion function without stopping iteration.
     Check(name string, fn CheckFunc) bool
+
+    // CheckEqual evaluates actual == expected under check name with zero allocations on pass.
+    CheckEqual(name string, actual, expected any) bool
+
+    // CheckTrue evaluates condition under check name.
+    CheckTrue(name string, condition bool, failureReason ...string) bool
+
+    // CheckNoError evaluates that err == nil under check name.
+    CheckNoError(name string, err error) bool
+
+    // Group executes fn within a named transaction boundary.
+    Group(name string, fn func(ctx VUContext) error) error
 }
 ```
 

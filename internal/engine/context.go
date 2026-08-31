@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -57,6 +59,9 @@ type ObservabilityProvider interface {
 type WorkflowController interface {
 	Sleep(d ...time.Duration) error
 	Check(name string, fn CheckFunc) bool
+	CheckEqual(name string, actual, expected any) bool
+	CheckTrue(name string, condition bool, failureReason ...string) bool
+	CheckNoError(name string, err error) bool
 	Group(name string, fn func(ctx VUContext) error) error
 }
 
@@ -397,17 +402,12 @@ func (c *scenarioContext) Sleep(d ...time.Duration) error {
 	}
 }
 
-func (c *scenarioContext) Check(name string, fn CheckFunc) bool {
-	var reason string
-	if fn != nil {
-		reason = fn()
-	}
-
+func (c *scenarioContext) recordCheck(name string, passed bool, reason string) bool {
 	if c.metrics == nil {
-		if reason != "" && c.logger != nil {
+		if !passed && c.logger != nil {
 			c.logger.Warn().Str("check", name).Str("reason", reason).Msg("check failed")
 		}
-		return reason == ""
+		return passed
 	}
 
 	pair, ok := c.checkCache[name]
@@ -422,7 +422,7 @@ func (c *scenarioContext) Check(name string, fn CheckFunc) bool {
 		c.checkCache[name] = pair
 	}
 
-	if reason == "" {
+	if passed {
 		pair.passed.Inc()
 		return true
 	}
@@ -432,6 +432,51 @@ func (c *scenarioContext) Check(name string, fn CheckFunc) bool {
 		c.logger.Warn().Str("check", name).Str("reason", reason).Msg("check failed")
 	}
 	return false
+}
+
+func (c *scenarioContext) Check(name string, fn CheckFunc) bool {
+	var reason string
+	if fn != nil {
+		reason = fn()
+	}
+	return c.recordCheck(name, reason == "", reason)
+}
+
+func compareEqual(actual, expected any) (equal bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			equal = reflect.DeepEqual(actual, expected)
+		}
+	}()
+	if actual == expected {
+		return true
+	}
+	return reflect.DeepEqual(actual, expected)
+}
+
+func (c *scenarioContext) CheckEqual(name string, actual, expected any) bool {
+	if compareEqual(actual, expected) {
+		return c.recordCheck(name, true, "")
+	}
+	return c.recordCheck(name, false, fmt.Sprintf("expected %v, got %v", expected, actual))
+}
+
+func (c *scenarioContext) CheckTrue(name string, condition bool, failureReason ...string) bool {
+	if condition {
+		return c.recordCheck(name, true, "")
+	}
+	reason := "expected condition to be true"
+	if len(failureReason) > 0 {
+		reason = failureReason[0]
+	}
+	return c.recordCheck(name, false, reason)
+}
+
+func (c *scenarioContext) CheckNoError(name string, err error) bool {
+	if err == nil {
+		return c.recordCheck(name, true, "")
+	}
+	return c.recordCheck(name, false, fmt.Sprintf("unexpected error: %v", err))
 }
 
 func (c *scenarioContext) Group(name string, fn func(ctx VUContext) error) error {

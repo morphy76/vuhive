@@ -281,6 +281,18 @@ func (a *publicVUContextAdapter) Check(name string, fn CheckFunc) bool {
 	return a.VUContext.Check(name, engine.CheckFunc(fn))
 }
 
+func (a *publicVUContextAdapter) CheckEqual(name string, actual, expected any) bool {
+	return a.VUContext.CheckEqual(name, actual, expected)
+}
+
+func (a *publicVUContextAdapter) CheckTrue(name string, condition bool, failureReason ...string) bool {
+	return a.VUContext.CheckTrue(name, condition, failureReason...)
+}
+
+func (a *publicVUContextAdapter) CheckNoError(name string, err error) bool {
+	return a.VUContext.CheckNoError(name, err)
+}
+
 func (a *publicVUContextAdapter) invokeGroup(engCtx engine.VUContext) error {
 	if a.childAdapter == nil {
 		a.childAdapter = &publicVUContextAdapter{}

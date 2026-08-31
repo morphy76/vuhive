@@ -21,12 +21,31 @@ func TestAlloc_ScenarioContext_Check_Passing(t *testing.T) {
 
 	// Warm-up check cache
 	sCtx.Check("status_200", func() string { return "" })
+	sCtx.CheckEqual("eq_200", 200, 200)
+	sCtx.CheckTrue("true_cond", true)
+	sCtx.CheckNoError("no_err", nil)
 
 	allocs := testing.AllocsPerRun(1000, func() {
 		_ = sCtx.Check("status_200", func() string { return "" })
 	})
-
 	assert.Equal(t, float64(0), allocs, "steady-state passing Check must produce 0 heap allocations")
+
+	actualCode := 200
+	expectedCode := 200
+	allocsEqual := testing.AllocsPerRun(1000, func() {
+		_ = sCtx.CheckEqual("eq_200", actualCode, expectedCode)
+	})
+	assert.Equal(t, float64(0), allocsEqual, "steady-state passing CheckEqual must produce 0 heap allocations")
+
+	allocsTrue := testing.AllocsPerRun(1000, func() {
+		_ = sCtx.CheckTrue("true_cond", true)
+	})
+	assert.Equal(t, float64(0), allocsTrue, "steady-state passing CheckTrue must produce 0 heap allocations")
+
+	allocsNoError := testing.AllocsPerRun(1000, func() {
+		_ = sCtx.CheckNoError("no_err", nil)
+	})
+	assert.Equal(t, float64(0), allocsNoError, "steady-state passing CheckNoError must produce 0 heap allocations")
 }
 
 func TestAlloc_ScenarioContext_Check_Failing_NoLogger(t *testing.T) {

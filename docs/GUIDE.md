@@ -384,6 +384,9 @@ To adhere strictly to the **Interface Segregation Principle (ISP)** and prevent 
 | `Metrics()` | `ObservabilityProvider` | `MetricsCollector` | Record custom counters, gauges, durations, rates |
 | `Sleep(d ...time.Duration)` | `WorkflowController` | `error` | Pause for explicit duration or scenario `interaction_delay` strategy (respects `ctx.Done()`) |
 | `Check(name, fn)` | `WorkflowController` | `bool` | Evaluate inline pass/fail assertion (`CheckFunc`) without stopping VU iteration |
+| `CheckEqual(name, actual, expected)` | `WorkflowController` | `bool` | Assert `actual == expected` with zero allocations on pass |
+| `CheckTrue(name, condition, [reason])` | `WorkflowController` | `bool` | Assert boolean condition is true |
+| `CheckNoError(name, err)` | `WorkflowController` | `bool` | Assert error is `nil` |
 | `Group(name, fn)` | `WorkflowController` | `error` | Execute `fn` within a named transaction boundary with automatic latency measurement |
 
 
@@ -1048,7 +1051,7 @@ RunVU: func(ctx vuhive.VUContext) error {
         return fmt.Errorf("stream read error: %w", err)
     }
 
-    ctx.Check("received_tokens", tokenCount > 0)
+    ctx.CheckTrue("received_tokens", tokenCount > 0)
     return nil
 }
 ```
@@ -1393,6 +1396,8 @@ HandleSummary: func(ctx vuhive.SummaryContext, summary vuhive.SummaryData) error
 
 ### 11.9 Inline Assertions (Checks)
 
+Inline assertions evaluate pass/fail criteria without stopping the Virtual User iteration. Results are auto-recorded to `vuhive.checks.passed` and `vuhive.checks.failed` metrics and presented in the report's CHECKS table.
+
 ```go
 RunVU: func(ctx vuhive.VUContext) error {
     resp, err := client.Do(req)
@@ -1401,12 +1406,21 @@ RunVU: func(ctx vuhive.VUContext) error {
     }
     defer resp.Body.Close()
 
-    // Assert HTTP status 200 without aborting iteration on check fail
-    ctx.Check("status is 200", func() string {
-        if resp.StatusCode != 200 {
-            return fmt.Sprintf("expected 200, got %d", resp.StatusCode)
+    // 1. Direct context assertion methods (zero allocations on pass)
+    ctx.CheckEqual("status is 200", resp.StatusCode, http.StatusOK)
+    ctx.CheckTrue("has_content", resp.ContentLength > 0)
+    ctx.CheckNoError("no_transport_err", err)
+
+    // 2. Composable assertion generators
+    ctx.Check("is_json", vuhive.Contains(resp.Header.Get("Content-Type"), "application/json"))
+    ctx.Check("latency_sla", vuhive.InRange(resp.Duration.Milliseconds(), 0, 250))
+
+    // 3. Custom assertion closure
+    ctx.Check("custom_validation", func() string {
+        if resp.Header.Get("X-Custom-Header") == "" {
+            return "missing X-Custom-Header"
         }
-        return ""
+        return "" // empty string indicates check passed
     })
 
     return nil
