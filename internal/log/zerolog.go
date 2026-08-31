@@ -39,7 +39,7 @@ func NewAsync(w io.Writer, level zerolog.Level) *ZerologLogger {
 	if w == io.Discard {
 		return New(w, level)
 	}
-	dw := diode.NewWriter(w, 10000, 10*time.Millisecond, nil)
+	dw := diode.NewWriter(struct{ io.Writer }{w}, 10000, 10*time.Millisecond, nil)
 	zlog := zerolog.New(dw).Level(level).With().Timestamp().Logger()
 	return &ZerologLogger{zlog: zlog, closer: dw}
 }
@@ -54,7 +54,7 @@ func NewAsyncWithFormat(w io.Writer, level zerolog.Level, format string) *Zerolo
 	if format == "pretty" {
 		out = zerolog.ConsoleWriter{Out: w, TimeFormat: time.RFC3339}
 	}
-	dw := diode.NewWriter(out, 10000, 10*time.Millisecond, nil)
+	dw := diode.NewWriter(struct{ io.Writer }{out}, 10000, 10*time.Millisecond, nil)
 	zlog := zerolog.New(dw).Level(level).With().Timestamp().Logger()
 
 	return &ZerologLogger{zlog: zlog, closer: dw}
