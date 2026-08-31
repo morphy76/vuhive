@@ -3,6 +3,7 @@ package vuhive_test
 import (
 	"context"
 	"io"
+	"net/http"
 	"testing"
 	"time"
 
@@ -181,4 +182,39 @@ func TestAlloc_PublicVUContext_Group(t *testing.T) {
 
 	assert.Equal(t, float64(0), allocs, "Public VUContext.Group must produce 0 steady-state heap allocations")
 }
+
+func TestAlloc_PublicVUContext_StateAccessors(t *testing.T) {
+	client := &http.Client{}
+	state := map[string]any{
+		"client": client,
+		"retries": 5,
+		"url": "http://localhost:8080",
+	}
+	engCtx := engine.NewScenarioContext(context.Background(), 1, 0, config.ScenarioConfig{}, "test_scenario", state, nil, nil)
+
+	suite := vuhive.NewSuite("Alloc Test Suite")
+	var capturedCtx vuhive.VUContext
+	suite.RegisterScenario("test_scenario", vuhive.Scenario{
+		RunVU: func(ctx vuhive.VUContext) error {
+			capturedCtx = ctx
+			return nil
+		},
+	})
+
+	runnerAdapter := vuhive.SuiteAdapterForTest(suite)
+	engScenario, _ := runnerAdapter.GetScenario("test_scenario")
+	_ = engScenario.RunVU(engCtx)
+
+	assert.NotNil(t, capturedCtx)
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		_, _ = vuhive.State[*http.Client](capturedCtx, "client")
+		_ = vuhive.MustState[*http.Client](capturedCtx, "client")
+		_ = vuhive.StateOrDefault(capturedCtx, "url", "http://fallback")
+		_, _ = vuhive.State[int](capturedCtx, "retries")
+	})
+
+	assert.Equal(t, float64(0), allocs, "Public VUContext state accessors must produce 0 steady-state heap allocations")
+}
+
 

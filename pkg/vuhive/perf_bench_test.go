@@ -148,3 +148,33 @@ func BenchmarkSuite_RunVU_Iteration(b *testing.B) {
 		_ = engScenario.RunVU(engCtx)
 	}
 }
+
+func BenchmarkPublicVUContext_StateAccessors(b *testing.B) {
+	state := map[string]any{
+		"url":     "http://localhost:8080",
+		"retries": 5,
+	}
+	engCtx := engine.NewScenarioContext(context.Background(), 1, 0, config.ScenarioConfig{}, "test_scenario", state, nil, nil)
+
+	suite := vuhive.NewSuite("Bench Suite")
+	var capturedCtx vuhive.VUContext
+	suite.RegisterScenario("test_scenario", vuhive.Scenario{
+		RunVU: func(ctx vuhive.VUContext) error {
+			capturedCtx = ctx
+			return nil
+		},
+	})
+
+	runnerAdapter := vuhive.SuiteAdapterForTest(suite)
+	engScenario, _ := runnerAdapter.GetScenario("test_scenario")
+	_ = engScenario.RunVU(engCtx)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_, _ = vuhive.State[string](capturedCtx, "url")
+		_ = vuhive.MustState[int](capturedCtx, "retries")
+		_ = vuhive.StateOrDefault(capturedCtx, "fallback_key", "default_val")
+	}
+}
+

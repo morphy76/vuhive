@@ -51,7 +51,7 @@ func main() {
 
 		// RunVU is invoked by worker goroutines upon arrival of each rate-limited token.
 		RunVU: func(ctx vuhive.VUContext) error {
-			store := ctx.GlobalState("user_store").(*mockUserStore)
+			store := vuhive.MustState[*mockUserStore](ctx, "user_store")
 
 			// Step 1: Read RPC service and method parameters from YAML configuration
 			serviceName := ctx.Param("service_name")

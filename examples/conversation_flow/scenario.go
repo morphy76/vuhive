@@ -68,8 +68,8 @@ func PreTest(ctx vuhive.VUContext) error {
 // RunVU executes the multi-turn conversational AI load iteration for a single virtual user.
 // It delegates to the event-driven ConversationFlow which mirrors an SSE callback architecture.
 func RunVU(ctx vuhive.VUContext) error {
-	client := ctx.GlobalState("client").(*dsl.ConversationClient)
-	messages := ctx.GlobalState("messages").([]dsl.Message)
+	client := vuhive.MustState[*dsl.ConversationClient](ctx, "client")
+	messages := vuhive.MustState[[]dsl.Message](ctx, "messages")
 
 	dialogModel := ctx.Param("dialog_model")
 	if dialogModel == "" {

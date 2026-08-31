@@ -76,7 +76,7 @@ func main() {
 
 		RunVU: func(ctx vuhive.VUContext) error {
 			client := vuhivehttp.Default(ctx)
-			serverURL := ctx.GlobalState("server_url").(string)
+			serverURL := vuhive.MustState[string](ctx, "server_url")
 
 			streamPath := ctx.Param("stream_path")
 			if streamPath == "" {

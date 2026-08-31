@@ -64,9 +64,9 @@ func main() {
 		},
 
 		RunVU: func(ctx vuhive.VUContext) error {
-			client := ctx.GlobalState("client").(*http.Client)
-			serverURL := ctx.GlobalState("server_url").(string)
-			expoGen := ctx.GlobalState("expo_delay").(vuhive.DelayGenerator)
+			client := vuhive.MustState[*http.Client](ctx, "client")
+			serverURL := vuhive.MustState[string](ctx, "server_url")
+			expoGen := vuhive.MustState[vuhive.DelayGenerator](ctx, "expo_delay")
 
 			// Step 1: Browse catalog
 			startCatalog := time.Now()

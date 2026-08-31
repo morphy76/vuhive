@@ -43,7 +43,7 @@ func main() {
 		func(ctx vuhive.VUContext) error {
 			// Step 1: Retrieve scenario's default instrumented HTTP client (zero Setup boilerplate)
 			client := vuhivehttp.Default(ctx)
-			serverURL := ctx.GlobalState("server_url").(string)
+			serverURL := vuhive.MustState[string](ctx, "server_url")
 
 			checkoutPath := ctx.Param("checkout_path")
 			if checkoutPath == "" {

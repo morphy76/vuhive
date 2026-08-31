@@ -132,10 +132,10 @@ func main() {
 		},
 
 		RunVU: func(ctx vuhive.VUContext) error {
-			csvDS := ctx.GlobalState("csv_dataset").(*data.DataSet)
-			jsonDS := ctx.GlobalState("json_dataset").(*data.DataSet)
-			client := ctx.GlobalState("client").(*http.Client)
-			serverURL := ctx.GlobalState("server_url").(string)
+			csvDS := vuhive.MustState[*data.DataSet](ctx, "csv_dataset")
+			jsonDS := vuhive.MustState[*data.DataSet](ctx, "json_dataset")
+			client := vuhive.MustState[*http.Client](ctx, "client")
+			serverURL := vuhive.MustState[string](ctx, "server_url")
 
 			// Step 1: Ingest next record from CSV (Sequential strategy) and query User API
 			userRec, err := csvDS.Next(ctx)

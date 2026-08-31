@@ -58,7 +58,7 @@ Optional lifecycle hooks can be passed via functional options (`WithSetup`, `Wit
 func main() {
 	vuhive.Run("http_checkout",
 		func(ctx vuhive.VUContext) error {
-			client := ctx.GlobalState("client").(*http.Client)
+			client := vuhive.MustState[*http.Client](ctx, "client")
 			// ...
 			return nil
 		},
@@ -142,14 +142,30 @@ Adhering to the **Interface Segregation Principle (ISP)**, vuhive provides role-
 | `ctx.ParamInt(key, default)` | `ConfigProvider` | Parses scenario param as integer (logs warning and returns default on parse failure). |
 | `ctx.ParamDuration(key, default)` | `ConfigProvider` | Parses scenario param as `time.Duration` (e.g. `200ms`, logs warning and returns default on parse failure). |
 | `ctx.HTTPConfig()` | `ConfigProvider` | Returns typed declarative HTTP client configuration (BaseURL, Timeout, Headers, TLS, Pool). |
-| `ctx.GlobalState(key)` | `StateProvider` | Accesses values returned by the `Setup` hook (shallow-copied, read-only). |
+| `ctx.GlobalState(key)` | `StateProvider` | Accesses values returned by the `Setup` hook (shallow-copied, read-only). Prefer generic accessors `vuhive.State[T]` / `vuhive.MustState[T]`. |
 | `ctx.Log()` | `ObservabilityProvider` | Structured `Logger` instance bound with VU ID and iteration context. |
 | `ctx.Metrics()` | `ObservabilityProvider` | `MetricsCollector` for recording custom counters, gauges, durations, and rates. |
 | `ctx.Sleep(d ...time.Duration)` | `WorkflowController` | Pauses for explicit duration or configured `interaction_delay` strategy (respects `ctx.Done()`). |
 | `ctx.Check(name, fn)` | `WorkflowController` | Evaluates inline pass/fail assertion (`CheckFunc`) without stopping VU iteration execution. |
 | `ctx.Group(name, fn)` | `WorkflowController` | Executes `fn` within a named transaction boundary with automatic latency recording (`vuhive.group.<path>.duration`). |
 
+### Type-Safe Generic State Accessors
 
+To eliminate runtime panics from raw type assertions, vuhive provides zero-allocation generic helper functions operating on `StateProvider`:
+
+- `vuhive.State[T](ctx, key)`: Returns typed value `(T, bool)`. Returns zero value and `false` if missing or type mismatch.
+- `vuhive.MustState[T](ctx, key)`: Returns typed value `T`, panicking with a descriptive error if missing or invalid.
+- `vuhive.StateOrDefault[T](ctx, key, defaultVal)`: Returns typed value `T` or fallback `defaultVal`.
+
+```go
+RunVU: func(ctx vuhive.VUContext) error {
+    client, ok := vuhive.State[*http.Client](ctx, "client")
+    serverURL := vuhive.StateOrDefault(ctx, "server_url", "http://localhost:8080")
+    token := vuhive.MustState[string](ctx, "auth_token")
+    // ...
+    return nil
+}
+```
 
 ---
 
@@ -419,7 +435,7 @@ Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
     return map[string]any{"users": ds}, nil
 },
 RunVU: func(ctx vuhive.VUContext) error {
-    ds := ctx.GlobalState("users").(*data.DataSet)
+    ds := vuhive.MustState[*data.DataSet](ctx, "users")
     user, err := ds.Next(ctx)
     if err != nil {
         return err
@@ -585,7 +601,7 @@ Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
     return map[string]any{"client": client}, nil
 },
 RunVU: func(ctx vuhive.VUContext) error {
-    client := ctx.GlobalState("client").(*http.Client)
+    client := vuhive.MustState[*http.Client](ctx, "client")
     req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example.com/items", nil)
     resp, err := client.Do(req) // Telemetry is recorded dynamically from ctx
     if err != nil {
@@ -658,7 +674,7 @@ func main() {
 		},
 
 		RunVU: func(ctx vuhive.VUContext) error {
-			client := ctx.GlobalState("kafka").(kafka.Client)
+			client := vuhive.MustState[kafka.Client](ctx, "kafka")
 
 			// 1. Publish event — latency, message count, bytes, and error rates are auto-recorded
 			msg := &kafka.Message{
@@ -741,7 +757,7 @@ func main() {
 		},
 		RunVU: func(ctx vuhive.VUContext) error {
 			baseURL := ctx.Param("base_url")
-			client := ctx.GlobalState("client").(*http.Client)
+			client := vuhive.MustState[*http.Client](ctx, "client")
 
 			start := time.Now()
 			req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/health", nil)
