@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
+	"time"
 
 	"github.com/morphy76/vuhive/pkg/vuhive"
 )
@@ -187,59 +187,38 @@ type standardTransport struct {
 }
 
 func (t *standardTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	ctx := req.Context()
 	acceptHeader := req.Header.Get("Accept")
 
 	if isSSEAcceptHeader(acceptHeader) {
-		stream, err := t.client.DoStream(ctx, req)
+		// SSE requests: pass through to the raw transport so third-party SDKs
+		// receive an unmodified streaming response body.  Apply default headers
+		// and record the SSE connection metric, but do NOT parse/re-serialize
+		// the event stream — callers that want structured SSE should use
+		// DoStream() or StreamSSE() directly.
+
+		for k, v := range t.client.cfg.defaultHeaders {
+			if req.Header.Get(k) == "" {
+				req.Header.Set(k, v)
+			}
+		}
+
+		method := req.Method
+		metricURL := sanitizeURL(req.URL)
+
+		start := time.Now()
+		resp, err := t.client.inner.Transport.RoundTrip(req)
+		connectDuration := time.Since(start)
+
 		if err != nil {
+			t.client.recordSSEConnectFailed(method, metricURL, connectDuration)
 			return nil, err
 		}
 
-		pr, pw := io.Pipe()
-		go func() {
-			defer func() {
-				_ = stream.Close()
-			}()
-			for stream.Next() {
-				ev := stream.Event()
-				var buf bytes.Buffer
-				if ev.ID != "" {
-					buf.WriteString("id: " + ev.ID + "\n")
-				}
-				if ev.Event != "" && ev.Event != "message" {
-					buf.WriteString("event: " + ev.Event + "\n")
-				}
-				if ev.Retry > 0 {
-					fmt.Fprintf(&buf, "retry: %d\n", ev.Retry)
-				}
-
-				for _, line := range strings.Split(ev.Data, "\n") {
-					buf.WriteString("data: " + line + "\n")
-				}
-				buf.WriteString("\n")
-				if _, writeErr := pw.Write(buf.Bytes()); writeErr != nil {
-					_ = pw.CloseWithError(writeErr)
-					return
-				}
-			}
-			if err := stream.Err(); err != nil {
-				_ = pw.CloseWithError(err)
-			} else {
-				_ = pw.Close()
-			}
-		}()
-
-		return &http.Response{
-			StatusCode: stream.StatusCode,
-			Status:     fmt.Sprintf("%d %s", stream.StatusCode, http.StatusText(stream.StatusCode)),
-			Header:     stream.Headers.Clone(),
-			Body:       &pipeStreamBody{PipeReader: pr, stream: stream},
-			Request:    req,
-		}, nil
+		t.client.recordSSEConnect(method, metricURL, resp.StatusCode, connectDuration)
+		return resp, nil
 	}
 
-	resp, err := t.client.Do(ctx, req)
+	resp, err := t.client.Do(req.Context(), req)
 	if err != nil {
 		return nil, err
 	}
@@ -254,21 +233,5 @@ func (t *standardTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	}, nil
 }
 
-type pipeStreamBody struct {
-	*io.PipeReader
-	stream *SSEStream
-}
+var _ http.RoundTripper = (*standardTransport)(nil)
 
-func (b *pipeStreamBody) Close() error {
-	streamErr := b.stream.Close()
-	pipeErr := b.PipeReader.Close()
-	if streamErr != nil {
-		return streamErr
-	}
-	return pipeErr
-}
-
-var (
-	_ http.RoundTripper = (*standardTransport)(nil)
-	_ io.ReadCloser     = (*pipeStreamBody)(nil)
-)

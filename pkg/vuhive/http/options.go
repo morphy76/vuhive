@@ -143,9 +143,13 @@ func (cfg *clientConfig) buildTransport() http.RoundTripper {
 	}
 
 	transport := &http.Transport{
-		MaxIdleConns:        cfg.maxIdleConns,
-		MaxIdleConnsPerHost: cfg.maxIdleConnsPerHost,
-		IdleConnTimeout:     cfg.idleConnTimeout,
+		Proxy:                 http.ProxyFromEnvironment,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          cfg.maxIdleConns,
+		MaxIdleConnsPerHost:   cfg.maxIdleConnsPerHost,
+		IdleConnTimeout:       cfg.idleConnTimeout,
+		TLSHandshakeTimeout:  10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 		DialContext: (&net.Dialer{
 			Timeout:   cfg.timeout,
 			KeepAlive: 30 * time.Second,
