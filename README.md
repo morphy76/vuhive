@@ -18,6 +18,7 @@
 - **Transaction Boundaries (Groups)**: Organize `RunVU` logic into named transaction steps and nested sub-groups with `ctx.Group(name, fn)`. Automatically measures per-step latency (`vuhive.group.<path>.duration`), formats dedicated `GROUPS` summary tables, and enables granular per-step SLA quality gates.
 - **Instrumented HTTP Client Module (`pkg/vuhive/http`)**: High-performance HTTP client helper (`vuhivehttp.Default`, `vuhivehttp.NewClientFromConfig`, `vuhivehttp.NewClient`) with declarative YAML configuration (`vuhive.yaml`), automatic metric collection (HDR request duration histograms, request counters, failure rates), response body parsing helpers (`.JSON()`, `.Text()`), opt-in `httptrace` phase latency breakdowns, connection pool tuning, and first-class **Server-Sent Events (SSE)** response streaming (`client.StreamSSE`, `client.DoStream`, `*vuhivehttp.SSEStream`) with automatic **iteration deadline detachment** for long-lived streams, context precedence resolution, and dedicated real-time streaming telemetry.
 - **Kafka Messaging Module (`pkg/vuhive/kafka`)**: Auto-instrumented Kafka Publisher and Consumer clients conditionally compiled via Go build tags (`-tags kafka`) for testing event-driven architectures with zero dependencies in standard builds.
+- **NATS Messaging Module (`pkg/vuhive/nats`)**: Auto-instrumented NATS Publisher, Subscriber, and Request-Reply RPC clients conditionally compiled via Go build tags (`-tags nats`) supporting Core NATS, JetStream, and Queue Subscriptions with zero dependencies in standard builds.
 - **Data Parameterization Module (`pkg/vuhive/data`)**: CSV, JSON, and JSON Lines dataset loaders (`LoadCSV`, `LoadJSON`, `LoadJSONL`) supporting thread-safe distribution strategies (`Sequential`, `Random`, `UniquePerVU`, `SharedQueue`).
 - **SLA Threshold Evaluator & Graceful Abort**: Declarative quality gates evaluated post-execution, with optional real-time early termination (`abort_on_fail: true`, `delay_abort_eval: 5s`) to stop runaway failures instantly. Returns exit code `0` on success or `1` on SLA breach/abort.
 - **Deterministic Reporting**: Terminal summary and JSON reports (§10 schema) with alphabetically sorted metrics.
@@ -742,6 +743,95 @@ func main() {
 | `vuhive.kafka.sub_total` | Counter | `topic`, `group`, `status` | Total messages consumed |
 | `vuhive.kafka.sub_bytes` | Counter | `topic` | Total payload bytes consumed |
 | `vuhive.kafka.sub_failed` | Rate | `topic`, `group`, `status` | Ratio of failed consume operations |
+
+---
+
+## NATS Messaging Module (`pkg/vuhive/nats`)
+
+Load and stress test NATS topologies with high-throughput Publisher, Subscriber, Request-Reply RPC, and JetStream clients. To avoid unnecessary binary dependencies for non-NATS workloads, the concrete driver is conditionally compiled using Go build tags.
+
+### Conditional Compilation Architecture
+
+- **Default Builds (`go build .`)**: Compiles a zero-dependency no-op fallback. Operations return `ErrNATSDisabled` with zero third-party NATS drivers linked into your binary.
+- **NATS Builds (`go build -tags nats .`)**: Compiles the official Go NATS driver (`nats.go`) with automatic telemetry.
+
+### Basic Usage (`-tags nats`)
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/morphy76/vuhive/pkg/vuhive"
+	"github.com/morphy76/vuhive/pkg/vuhive/nats"
+)
+
+func main() {
+	suite := vuhive.NewSuite("NATS Messaging Load Test")
+
+	suite.RegisterScenario("nats_pub_sub", vuhive.Scenario{
+		Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
+			// Initialize shared NATS Client (Publisher + Subscriber)
+			client, err := nats.NewClient(ctx,
+				nats.WithURL("nats://localhost:4222"),
+				nats.WithName("vuhive-load-worker"),
+				nats.WithTimeout(5*time.Second),
+			)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"nats": client}, nil
+		},
+
+		RunVU: func(ctx vuhive.VUContext) error {
+			client := vuhive.MustState[nats.Client](ctx, "nats")
+
+			// 1. Publish notification event — latency, count, bytes, and error rates are auto-recorded
+			msg := &nats.Message{
+				Subject: "orders.created",
+				Data:    []byte(`{"order_id":"ord-1001","amount":79.50}`),
+				Header:  map[string][]string{"source": {"load-generator"}},
+			}
+			if err := client.PublishMsg(ctx, msg); err != nil {
+				return err
+			}
+
+			// 2. Request-Reply RPC — round-trip latency histogram recorded to vuhive.nats.req_duration
+			reply, err := client.Request(ctx, "orders.process", []byte(`{"order_id":"ord-1001"}`), 2*time.Second)
+			if err != nil {
+				return err
+			}
+			_ = reply
+
+			return nil
+		},
+
+		Teardown: func(ctx vuhive.TeardownContext, state map[string]any) error {
+			if client, ok := state["nats"].(nats.Client); ok && client != nil {
+				return client.Close()
+			}
+			return nil
+		},
+	})
+
+	suite.Execute()
+}
+```
+
+### Auto-Recorded NATS Metrics
+
+| Metric Identifier | Type | Tags | Description |
+|---|---|---|---|
+| `vuhive.nats.pub_duration` | Duration (HDR) | `subject`, `status` | Publish latency histogram |
+| `vuhive.nats.pub_total` | Counter | `subject`, `status` | Total messages published |
+| `vuhive.nats.pub_bytes` | Counter | `subject` | Total payload bytes published |
+| `vuhive.nats.pub_failed` | Rate | `subject`, `status` | Ratio of failed publish operations |
+| `vuhive.nats.req_duration` | Duration (HDR) | `subject`, `status` | Request-Reply round-trip latency histogram |
+| `vuhive.nats.sub_received_total` | Counter | `subject`, `status` | Total messages received |
+| `vuhive.nats.sub_bytes` | Counter | `subject` | Total payload bytes received |
+| `vuhive.nats.sub_failed` | Rate | `subject`, `status` | Ratio of failed receive operations |
 
 ---
 

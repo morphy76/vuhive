@@ -158,6 +158,33 @@ const (
 	// MetricKafkaSubFailed tracks Kafka consumer failure rate (Rate).
 	MetricKafkaSubFailed = "vuhive.kafka.sub_failed"
 
+	// MetricNATSPrefix is the prefix for all built-in NATS module metrics.
+	MetricNATSPrefix = "vuhive.nats."
+
+	// MetricNATSPubDuration records NATS publish latency (Duration histogram).
+	MetricNATSPubDuration = "vuhive.nats.pub_duration"
+
+	// MetricNATSPubTotal tracks total NATS messages published (Counter).
+	MetricNATSPubTotal = "vuhive.nats.pub_total"
+
+	// MetricNATSPubBytes tracks total NATS payload bytes published (Counter).
+	MetricNATSPubBytes = "vuhive.nats.pub_bytes"
+
+	// MetricNATSPubFailed tracks NATS publish failure rate (Rate).
+	MetricNATSPubFailed = "vuhive.nats.pub_failed"
+
+	// MetricNATSReqDuration records NATS request-reply round-trip latency (Duration histogram).
+	MetricNATSReqDuration = "vuhive.nats.req_duration"
+
+	// MetricNATSSubReceivedTotal tracks total NATS messages received (Counter).
+	MetricNATSSubReceivedTotal = "vuhive.nats.sub_received_total"
+
+	// MetricNATSSubBytes tracks total NATS payload bytes read (Counter).
+	MetricNATSSubBytes = "vuhive.nats.sub_bytes"
+
+	// MetricNATSSubFailed tracks NATS receive failure rate (Rate).
+	MetricNATSSubFailed = "vuhive.nats.sub_failed"
+
 	// MetricGroupPrefix is the prefix for all built-in transaction group duration metrics.
 	MetricGroupPrefix = "vuhive.group."
 
