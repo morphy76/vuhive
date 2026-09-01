@@ -345,6 +345,17 @@
             200
           ]
         },
+        "burst_buffer": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Bounded queue depth for arrival_rate token dispatch. Absorbs transient worker availability fluctuations before dropping tokens. When 0 (default), auto-sized to max(2 × target_tps, max_vus).",
+          "examples": [
+            0,
+            50,
+            200
+          ]
+        },
         "stages": {
           "type": "array",
           "minItems": 1,

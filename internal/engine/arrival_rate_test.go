@@ -57,11 +57,12 @@ func TestArrivalRatePoolSaturationDropsIterations(t *testing.T) {
 	}
 
 	cfg := config.ScenarioConfig{
-		Type:      config.ScenarioTypeArrivalRate,
-		TargetTPS: 100,
-		MaxVUs:    2,
-		RunPeriod: 500 * time.Millisecond,
-		VUTimeout: 1 * time.Second,
+		Type:        config.ScenarioTypeArrivalRate,
+		TargetTPS:   100,
+		MaxVUs:      2,
+		BurstBuffer: 1, // minimal buffer to observe saturation drops
+		RunPeriod:   500 * time.Millisecond,
+		VUTimeout:   1 * time.Second,
 	}
 
 	exec := engine.NewExecutor("test_arrival_rate", scenario, cfg, logger, metrics)
@@ -200,3 +201,40 @@ func TestArrivalRateZeroRampDownInFlightWorkersNotReportedAsTimeoutsOrFailures(t
 	assert.Greater(t, totalCount, int64(0), "completed iterations before expiration should be recorded in total")
 }
 
+// Issue #103: BurstBuffer absorbs transient jitter that would cause drops with a small buffer.
+// With BurstBuffer=0 (auto-sized to 2×TargetTPS or MaxVUs, whichever is larger), transient
+// worker busyness should be absorbed by the queue rather than immediately dropping iterations.
+func TestArrivalRate_BurstBuffer_AbsorbsJitter(t *testing.T) {
+	logger, metrics := newTestDeps()
+
+	scenario := engine.Scenario{
+		RunVU: func(ctx engine.VUContext) error {
+			// Brief work simulating occasional jitter
+			time.Sleep(10 * time.Millisecond)
+			return nil
+		},
+	}
+
+	// target_tps=5, max_vus=5, vu_timeout=100ms → RequiredVUs=ceil(5*0.1)=1
+	// Workers finish in ~10ms, well within 100ms timeout.
+	// With 5 VUs and TPS=5, each VU handles at most 1 TPS on average.
+	// The burst buffer (auto-sized) should absorb any transient scheduling jitter.
+	cfg := config.ScenarioConfig{
+		Type:        config.ScenarioTypeArrivalRate,
+		TargetTPS:   5,
+		MaxVUs:      5,
+		BurstBuffer: 20, // explicit burst buffer to absorb jitter
+		RunPeriod:   500 * time.Millisecond,
+		VUTimeout:   100 * time.Millisecond,
+	}
+
+	exec := engine.NewExecutor("test_burst_buffer", scenario, cfg, logger, metrics)
+	err := exec.Execute(context.Background())
+	require.NoError(t, err)
+
+	dropped := metrics.AggregatedCounterValue(metric.MetricPacingDroppedIterations)
+	total := metrics.AggregatedCounterValue(metric.MetricIterationsTotal)
+
+	assert.Equal(t, int64(0), dropped, "burst buffer should absorb all transient jitter without dropping")
+	assert.Greater(t, total, int64(0), "should have completed iterations")
+}

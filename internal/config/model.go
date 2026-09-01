@@ -54,6 +54,11 @@ type ScenarioConfig struct {
 	// MaxVUs is the hard cap on concurrent goroutines (required for arrival_rate).
 	MaxVUs int
 
+	// BurstBuffer is the bounded queue depth for arrival_rate token dispatch.
+	// Absorbs transient worker availability fluctuations before dropping tokens.
+	// When zero, a sensible default is computed automatically.
+	BurstBuffer int
+
 	// Stages defines the multi-stage ramping profile (required for ramping_vus).
 	Stages []StageConfig
 
