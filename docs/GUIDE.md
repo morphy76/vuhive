@@ -257,6 +257,7 @@ scenarios:
     # --- arrival_rate fields ---
     # target_tps: 100            # target transactions/sec (required for arrival_rate)
     # max_vus: 50                # worker pool cap (required for arrival_rate)
+    # burst_buffer: 0            # token dispatch queue depth (0 = auto-size, optional)
 
     # --- http (declarative HTTP client configuration) ---
     http:
@@ -832,7 +833,8 @@ Dispatches iterations at a target TPS using a token bucket. A bounded worker poo
 ```yaml
 type: arrival_rate
 target_tps: 100       # 100 iterations/second
-max_vus: 50           # max concurrent workers
+max_vus: 200          # max concurrent workers
+burst_buffer: 0       # token dispatch queue depth (0 = auto-size)
 ramp_up: 10s
 run_period: 1m
 ramp_down: 5s         # optional dispatch ramp-down
@@ -840,7 +842,9 @@ drain: 10s            # optional grace period for in-flight workers
 vu_timeout: 2s
 ```
 
-If all `max_vus` workers are busy when a token arrives, the iteration is **dropped** and `vuhive.pacing.dropped_iterations` is incremented. In-flight workers completing during the `drain` phase are recorded normally; remaining active workers after drain timeout are discarded without false timeout or error reporting.
+**Capacity Validation (Little's Law)**: At startup, vuhive validates that `max_vus >= ceil(target_tps × vu_timeout)`. If the worker pool is too small to sustain the target throughput, configuration validation fails with a descriptive error showing the required minimum and the maximum achievable TPS.
+
+**Burst Buffering**: When a token arrives and all workers are busy, the token is queued in a bounded burst buffer instead of being dropped immediately. This absorbs transient worker availability fluctuations (GC pauses, scheduling jitter). When `burst_buffer` is `0` (default), it is auto-sized to `max(2 × target_tps, max_vus)`. If the buffer fills completely, subsequent tokens are dropped and `vuhive.pacing.dropped_iterations` is incremented. In-flight workers completing during the `drain` phase are recorded normally; remaining active workers after drain timeout are discarded without false timeout or error reporting.
 
 **Best for**: testing at a specific throughput regardless of response time.
 
@@ -1532,6 +1536,10 @@ Telemetry collection is built for ultra-high concurrency across multi-core proce
 ### 14.3 Bounded Worker Pool Pacing (`arrival_rate`)
 
 In `arrival_rate` mode, `vuhive` maintains a pre-allocated worker pool of up to `max_vus` persistent goroutines consuming iteration jobs from a bounded channel. This eliminates continuous goroutine creation and destruction under high TPS, preventing runtime scheduler thrashing and GC metadata overhead.
+
+**Burst Buffering**: Tokens dispatched by the rate limiter are queued in a bounded burst buffer channel before being consumed by workers. The buffer absorbs transient worker availability fluctuations (GC pauses, scheduling jitter) without immediately dropping iterations. When `burst_buffer` is `0` (default), the queue depth is auto-sized to `max(2 × target_tps, max_vus)`.
+
+**Little's Law Capacity Validation**: At startup, vuhive validates that `max_vus >= ceil(target_tps × vu_timeout)` using Little's Law. This ensures the worker pool is large enough to sustain the target throughput given the per-iteration timeout budget.
 
 ### 14.4 Running Microbenchmarks
 

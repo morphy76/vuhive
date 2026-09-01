@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -280,6 +281,28 @@ func validateScenario(name string, sc *ScenarioConfig) error {
 			return &ValidationError{
 				Field:   prefix + ".run_period",
 				Message: "must be > 0",
+			}
+		}
+		// Little's Law capacity validation: RequiredVUs = ceil(TargetTPS × VUTimeout_seconds).
+		if sc.VUTimeout > 0 {
+			vuTimeoutSec := sc.VUTimeout.Seconds()
+			requiredVUs := int(math.Ceil(float64(sc.TargetTPS) * vuTimeoutSec))
+			if sc.MaxVUs < requiredVUs {
+				return &ValidationError{
+					Field: prefix + ".max_vus",
+					Message: fmt.Sprintf(
+						"insufficient for target throughput: max_vus=%d but Little's Law requires at least %d (ceil(%d × %.3fs)); maximum achievable TPS is %.1f",
+						sc.MaxVUs, requiredVUs, sc.TargetTPS, vuTimeoutSec,
+						float64(sc.MaxVUs)/vuTimeoutSec,
+					),
+				}
+			}
+		}
+		// burst_buffer must be >= 0.
+		if sc.BurstBuffer < 0 {
+			return &ValidationError{
+				Field:   prefix + ".burst_buffer",
+				Message: "must be >= 0",
 			}
 		}
 	case ScenarioTypeRampingVUs:

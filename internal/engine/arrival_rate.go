@@ -45,7 +45,17 @@ func RunArrivalRate(
 		maxVUs = 1
 	}
 
-	tokenCh := make(chan int64, maxVUs)
+	// Bounded burst buffer: absorbs transient worker availability fluctuations
+	// before dropping tokens. When BurstBuffer is explicitly configured, use it;
+	// otherwise auto-size to max(2 × TargetTPS, MaxVUs).
+	burstBuffer := cfg.BurstBuffer
+	if burstBuffer <= 0 {
+		burstBuffer = 2 * cfg.TargetTPS
+		if burstBuffer < maxVUs {
+			burstBuffer = maxVUs
+		}
+	}
+	tokenCh := make(chan int64, burstBuffer)
 	var wg sync.WaitGroup
 	var iterSeq int64
 

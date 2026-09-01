@@ -38,7 +38,7 @@ scenarios:
   payment:
     type: "arrival_rate"
     target_tps: 100
-    max_vus: 50
+    max_vus: 300
     ramp_up: "10s"
     run_period: "1m"
     ramp_down: "5s"
@@ -77,7 +77,7 @@ func TestValidYAMLRoundTrips(t *testing.T) {
 	require.True(t, ok, "payment scenario must exist")
 	assert.Equal(t, config.ScenarioTypeArrivalRate, payment.Type)
 	assert.Equal(t, 100, payment.TargetTPS)
-	assert.Equal(t, 50, payment.MaxVUs)
+	assert.Equal(t, 300, payment.MaxVUs)
 	assert.Equal(t, 10*time.Second, payment.RampUp)
 	assert.Equal(t, 1*time.Minute, payment.RunPeriod)
 	assert.Equal(t, 5*time.Second, payment.RampDown)

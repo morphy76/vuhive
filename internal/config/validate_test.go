@@ -690,3 +690,127 @@ func TestValidate_HTTPClients(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestValidate_ArrivalRate_InsufficientMaxVUs(t *testing.T) {
+	// Little's Law: RequiredVUs = ceil(TargetTPS * VUTimeout_seconds)
+	// TargetTPS=100, VUTimeout=2s → RequiredVUs = ceil(100 * 2) = 200
+	// MaxVUs=10 is insufficient.
+	cfg := &config.Config{
+		Version: "1.0",
+		Scenarios: map[string]config.ScenarioConfig{
+			"s1": {
+				Type:      config.ScenarioTypeArrivalRate,
+				TargetTPS: 100,
+				MaxVUs:    10,
+				RunPeriod: 10 * time.Second,
+				VUTimeout: 2 * time.Second,
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	require.Error(t, err)
+	var valErr *config.ValidationError
+	require.True(t, errors.As(err, &valErr))
+	assert.Equal(t, "scenarios.s1.max_vus", valErr.Field)
+	assert.Contains(t, valErr.Message, "200")
+}
+
+func TestValidate_ArrivalRate_SufficientMaxVUs(t *testing.T) {
+	// TargetTPS=100, VUTimeout=2s → RequiredVUs = 200
+	// MaxVUs=200 is exactly sufficient.
+	cfg := &config.Config{
+		Version: "1.0",
+		Scenarios: map[string]config.ScenarioConfig{
+			"s1": {
+				Type:      config.ScenarioTypeArrivalRate,
+				TargetTPS: 100,
+				MaxVUs:    200,
+				RunPeriod: 10 * time.Second,
+				VUTimeout: 2 * time.Second,
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	require.NoError(t, err)
+}
+
+func TestValidate_ArrivalRate_ExactBoundaryMaxVUs(t *testing.T) {
+	// TargetTPS=10, VUTimeout=1s → RequiredVUs = ceil(10 * 1) = 10
+	// MaxVUs=10 is exactly sufficient.
+	cfg := &config.Config{
+		Version: "1.0",
+		Scenarios: map[string]config.ScenarioConfig{
+			"s1": {
+				Type:      config.ScenarioTypeArrivalRate,
+				TargetTPS: 10,
+				MaxVUs:    10,
+				RunPeriod: 10 * time.Second,
+				VUTimeout: 1 * time.Second,
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	require.NoError(t, err)
+}
+
+func TestValidate_ArrivalRate_FractionalCeiling(t *testing.T) {
+	// TargetTPS=3, VUTimeout=500ms → RequiredVUs = ceil(3 * 0.5) = ceil(1.5) = 2
+	// MaxVUs=1 is insufficient.
+	cfg := &config.Config{
+		Version: "1.0",
+		Scenarios: map[string]config.ScenarioConfig{
+			"s1": {
+				Type:      config.ScenarioTypeArrivalRate,
+				TargetTPS: 3,
+				MaxVUs:    1,
+				RunPeriod: 10 * time.Second,
+				VUTimeout: 500 * time.Millisecond,
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	require.Error(t, err)
+	var valErr *config.ValidationError
+	require.True(t, errors.As(err, &valErr))
+	assert.Equal(t, "scenarios.s1.max_vus", valErr.Field)
+	assert.Contains(t, valErr.Message, "2")
+}
+
+func TestValidate_ArrivalRate_NegativeBurstBuffer(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1.0",
+		Scenarios: map[string]config.ScenarioConfig{
+			"s1": {
+				Type:        config.ScenarioTypeArrivalRate,
+				TargetTPS:   10,
+				MaxVUs:      10,
+				RunPeriod:   10 * time.Second,
+				VUTimeout:   1 * time.Second,
+				BurstBuffer: -1,
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	require.Error(t, err)
+	var valErr *config.ValidationError
+	require.True(t, errors.As(err, &valErr))
+	assert.Equal(t, "scenarios.s1.burst_buffer", valErr.Field)
+}
+
+func TestValidate_ArrivalRate_ValidBurstBuffer(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1.0",
+		Scenarios: map[string]config.ScenarioConfig{
+			"s1": {
+				Type:        config.ScenarioTypeArrivalRate,
+				TargetTPS:   10,
+				MaxVUs:      10,
+				RunPeriod:   10 * time.Second,
+				VUTimeout:   1 * time.Second,
+				BurstBuffer: 50,
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	require.NoError(t, err)
+}

@@ -21,6 +21,7 @@ type scenarioConfigDTO struct {
 	VUs              int                  `mapstructure:"vus"`
 	TargetTPS        int                  `mapstructure:"target_tps"`
 	MaxVUs           int                  `mapstructure:"max_vus"`
+	BurstBuffer      int                  `mapstructure:"burst_buffer"`
 	Stages           []stageConfigDTO     `mapstructure:"stages"`
 	RampUp           time.Duration        `mapstructure:"ramp_up"`
 	RunPeriod        time.Duration        `mapstructure:"run_period"`
@@ -119,15 +120,16 @@ func (d *scenarioConfigDTO) toModel() ScenarioConfig {
 		drain = d.DrainPeriod
 	}
 	sc := ScenarioConfig{
-		Type:      d.Type,
-		VUs:       d.VUs,
-		TargetTPS: d.TargetTPS,
-		MaxVUs:    d.MaxVUs,
-		RampUp:    d.RampUp,
-		RunPeriod: d.RunPeriod,
-		RampDown:  d.RampDown,
-		Drain:     drain,
-		VUTimeout: d.VUTimeout,
+		Type:        d.Type,
+		VUs:         d.VUs,
+		TargetTPS:   d.TargetTPS,
+		MaxVUs:      d.MaxVUs,
+		BurstBuffer: d.BurstBuffer,
+		RampUp:      d.RampUp,
+		RunPeriod:   d.RunPeriod,
+		RampDown:    d.RampDown,
+		Drain:       drain,
+		VUTimeout:   d.VUTimeout,
 	}
 
 	if d.Stages != nil {

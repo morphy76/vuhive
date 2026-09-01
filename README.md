@@ -325,7 +325,7 @@ scenarios:
   user_registration_api:
     type: arrival_rate
     target_tps: 50
-    max_vus: 20
+    max_vus: 50
     ramp_up: 10s
     run_period: 1m
     vu_timeout: 1s
@@ -348,10 +348,12 @@ scenarios:
 2. **`arrival_rate`**:
    - `target_tps`: Desired transactions/iterations per second (`int > 0`).
    - `max_vus`: Maximum size of the worker pool (`int > 0`). If the pool saturates, unhandled tokens increment `vuhive.pacing.dropped_iterations`.
+   - `burst_buffer`: Bounded queue depth for token dispatch (`int >= 0`, default `0`). Absorbs transient worker availability fluctuations before dropping tokens. When `0`, auto-sized to `max(2 × target_tps, max_vus)`.
    - `ramp_up`: Linear rate ramp-up duration (`time.Duration`).
    - `run_period`: Steady-state arrival duration (`time.Duration`).
    - `ramp_down`: Duration for active token dispatch ramp-down (`time.Duration`, default `0s`).
    - `drain`: Grace period for in-flight workers to complete before cancellation (`time.Duration`, default `0s`). Alias: `drain_period`.
+   - **Capacity Validation**: At startup, vuhive validates that `max_vus >= ceil(target_tps × vu_timeout)` using Little's Law. If the worker pool is too small to sustain the target throughput, configuration validation fails with a descriptive error showing the required minimum and the maximum achievable TPS.
 
 3. **`ramping_vus`**:
    - `stages`: List of stage definitions (`target: int`, `duration: time.Duration`).
