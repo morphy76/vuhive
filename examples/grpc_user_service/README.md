@@ -20,7 +20,7 @@ While HTTP/REST is common, `vuhive` is protocol-agnostic and well-suited for hig
 | File | Description |
 |---|---|
 | [`main.go`](main.go) | Scenario demonstrating RPC execution, open-system arrival rate handling, and tagged metrics. Includes an in-memory mock user store. |
-| [`vuhive.yaml`](vuhive.yaml) | Configuration with `arrival_rate` pacing (`target_tps: 20`, `max_vus: 10`) and latency thresholds. |
+| [`vuhive.yaml`](vuhive.yaml) | Configuration with `arrival_rate` pacing (`target_tps: 20`, `max_vus: 20`) and latency thresholds. |
 
 ---
 
@@ -51,7 +51,7 @@ scenarios:
   grpc_user_service_flow:
     type: arrival_rate   # Open-system rate-limiting model
     target_tps: 20       # Target rate: 20 iterations/second
-    max_vus: 10          # Maximum worker pool concurrency cap
+    max_vus: 20          # Maximum worker pool concurrency cap
     ramp_up: 100ms       # Linear TPS rate ramp-up
     run_period: 500ms    # Steady-state duration
     ramp_down: 100ms     # Grace period for in-flight requests
@@ -81,7 +81,7 @@ scenarios:
                         VUHIVE LOAD TEST SUMMARY
 ================================================================================
 Scenario:     grpc_user_service_flow          Version: dev
-Mode:         arrival_rate (20 TPS, max 10 VUs)  Commit:  none
+Mode:         arrival_rate (20 TPS, max 20 VUs)  Commit:  none
 Duration:     00:00:00  (ramp-up: 100ms | run: 500ms | ramp-down: 100ms)
 Iterations:   11 total  |  0 failed (0.00%)  |  0 timeout
 

@@ -833,7 +833,7 @@ Dispatches iterations at a target TPS using a token bucket. A bounded worker poo
 ```yaml
 type: arrival_rate
 target_tps: 100       # 100 iterations/second
-max_vus: 50           # max concurrent workers
+max_vus: 200          # max concurrent workers
 burst_buffer: 0       # token dispatch queue depth (0 = auto-size)
 ramp_up: 10s
 run_period: 1m

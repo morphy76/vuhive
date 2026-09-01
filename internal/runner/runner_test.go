@@ -220,7 +220,7 @@ scenarios:
   scenario_explicit:
     type: arrival_rate
     target_tps: 10
-    max_vus: 5
+    max_vus: 10
     run_period: 3s
     vu_timeout: 1s
 `)

@@ -7,7 +7,7 @@ scenarios:
     # Open-system pacing engine targeting a precise rate of transactions per second (TPS)
     type: arrival_rate
     target_tps: 20        # Target rate: 20 transactions / iterations per second
-    max_vus: 10           # Maximum size of bounded worker pool
+    max_vus: 20           # Maximum size of bounded worker pool
     ramp_up: 100ms        # Linear rate ramp-up duration
     run_period: 500ms     # Steady-state execution duration
     ramp_down: 100ms      # Grace period allowing in-flight RPCs to complete

@@ -234,7 +234,7 @@ scenarios:
   test_arrival:
     type: arrival_rate
     target_tps: 100
-    max_vus: 50
+    max_vus: 100
     run_period: 1m
     vu_timeout: 1s
     thresholds:

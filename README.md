@@ -325,7 +325,7 @@ scenarios:
   user_registration_api:
     type: arrival_rate
     target_tps: 50
-    max_vus: 20
+    max_vus: 50
     ramp_up: 10s
     run_period: 1m
     vu_timeout: 1s
