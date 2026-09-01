@@ -1,0 +1,31 @@
+version: "1.0"
+
+scenarios:
+  nats_messaging_flow:
+    executor: ramping_vus
+    start_vus: 2
+    stages:
+      - duration: 2s
+        target: 10
+      - duration: 3s
+        target: 10
+      - duration: 1s
+        target: 0
+    graceful_stop: 2s
+    vu_timeout: 5s
+
+thresholds:
+  - metric: vuhive.nats.pub_duration
+    stat: p95
+    operator: "<"
+    target: "10ms"
+
+  - metric: vuhive.nats.req_duration
+    stat: p95
+    operator: "<"
+    target: "20ms"
+
+  - metric: vuhive.nats.pub_failed
+    stat: rate
+    operator: "<="
+    target: "0.01"

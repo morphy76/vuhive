@@ -619,6 +619,14 @@ All built-in metrics are exported as typed constants in `pkg/vuhive` (e.g. `vuhi
 | `vuhive.MetricKafkaSubTotal` | `vuhive.kafka.sub_total` | Counter | Total Kafka messages consumed |
 | `vuhive.MetricKafkaSubBytes` | `vuhive.kafka.sub_bytes` | Counter | Total Kafka payload bytes consumed |
 | `vuhive.MetricKafkaSubFailed` | `vuhive.kafka.sub_failed` | Rate | Failed Kafka consume attempts ratio |
+| `vuhive.MetricNATSPubDuration` | `vuhive.nats.pub_duration` | Duration | NATS publish latency |
+| `vuhive.MetricNATSPubTotal` | `vuhive.nats.pub_total` | Counter | Total NATS messages published |
+| `vuhive.MetricNATSPubBytes` | `vuhive.nats.pub_bytes` | Counter | Total NATS payload bytes published |
+| `vuhive.MetricNATSPubFailed` | `vuhive.nats.pub_failed` | Rate | Failed NATS publish attempts ratio |
+| `vuhive.MetricNATSReqDuration` | `vuhive.nats.req_duration` | Duration | NATS Request-Reply round-trip latency |
+| `vuhive.MetricNATSSubReceivedTotal` | `vuhive.nats.sub_received_total` | Counter | Total NATS messages received |
+| `vuhive.MetricNATSSubBytes` | `vuhive.nats.sub_bytes` | Counter | Total NATS payload bytes received |
+| `vuhive.MetricNATSSubFailed` | `vuhive.nats.sub_failed` | Rate | Failed NATS receive attempts ratio |
 | `vuhive.MetricGroupPrefix` | `vuhive.group.<path>.duration` | Duration | Per-step transaction group latency (nested with `::`) |
 
 > **In-Flight Iterations on Shutdown:** `vuhive.vu.iterations_timeout` tracks only genuine per-iteration timeouts where `RunVU` exceeded `vu_timeout` during active execution. In-flight iterations that are interrupted when the overall scenario completes (`run_period` / `ramp_down` expiration or early abort) are cleanly cancelled and discarded without being counted as timeouts or failures.
@@ -1220,7 +1228,81 @@ func main() {
 }
 ```
 
-### 11.4 Data Parameterization (`pkg/vuhive/data`)
+### 11.4 NATS Messaging & Request-Reply RPC (`pkg/vuhive/nats`)
+
+For NATS-based microservices and event meshes, use `pkg/vuhive/nats` (compiled with `-tags nats`) to test Core NATS pub/sub, synchronous Request-Reply RPCs, Queue Subscriptions, and JetStream publishers with automated latency, counter, byte, and error tracking.
+
+#### Why Use `pkg/vuhive/nats`?
+- **Zero Standard Dependencies**: Default builds (`!nats`) link 0 NATS client code and return `ErrNATSDisabled`. Compiling with `-tags nats` activates the official Go NATS client driver (`nats.go`).
+- **Auto-Recorded Metrics**: Automatically tracks `vuhive.nats.pub_duration`, `vuhive.nats.pub_total`, `vuhive.nats.pub_bytes`, `vuhive.nats.pub_failed`, `vuhive.nats.req_duration`, `vuhive.nats.sub_received_total`, `vuhive.nats.sub_bytes`, and `vuhive.nats.sub_failed`.
+- **Publisher, Subscriber & RPC**: Clean `Publish`, `PublishMsg`, `Request`, `Subscribe`, `QueueSubscribe`, and `JetStream` interfaces.
+- **Enterprise Features**: Authentication (Token, User/Password, NKey, User Credentials), TLS, custom reconnection policies, and metrics prefix customization.
+
+#### Example Usage
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/morphy76/vuhive/pkg/vuhive"
+	"github.com/morphy76/vuhive/pkg/vuhive/nats"
+)
+
+func main() {
+	suite := vuhive.NewSuite("NATS Messaging Load Test")
+
+	suite.RegisterScenario("order_flow", vuhive.Scenario{
+		Setup: func(ctx vuhive.SetupContext) (map[string]any, error) {
+			client, err := nats.NewClient(ctx,
+				nats.WithURL("nats://localhost:4222"),
+				nats.WithName("vuhive-order-worker"),
+				nats.WithTimeout(5*time.Second),
+			)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"nats": client}, nil
+		},
+
+		RunVU: func(ctx vuhive.VUContext) error {
+			client := vuhive.MustState[nats.Client](ctx, "nats")
+
+			// 1. Publish notification event — auto-records pub_duration, pub_total, pub_bytes, pub_failed
+			msg := &nats.Message{
+				Subject: "orders.created",
+				Data:    []byte(`{"order_id":"ord-101","total":89.00}`),
+				Header:  map[string][]string{"origin": {"vuhive"}},
+			}
+			if err := client.PublishMsg(ctx, msg); err != nil {
+				return err
+			}
+
+			// 2. Request-Reply RPC — auto-records req_duration round-trip latency
+			reply, err := client.Request(ctx, "orders.process", []byte(`{"order_id":"ord-101"}`), 2*time.Second)
+			if err != nil {
+				return err
+			}
+			_ = reply
+
+			return nil
+		},
+
+		Teardown: func(ctx vuhive.TeardownContext, state map[string]any) error {
+			if client, ok := state["nats"].(nats.Client); ok && client != nil {
+				return client.Close()
+			}
+			return nil
+		},
+	})
+
+	suite.Execute()
+}
+```
+
+### 11.5 Data Parameterization (`pkg/vuhive/data`)
 
 Use the dedicated `github.com/morphy76/vuhive/pkg/vuhive/data` package to load CSV, JSON, or JSON Lines datasets with thread-safe record distribution strategies:
 
@@ -1254,7 +1336,7 @@ RunVU: func(ctx vuhive.VUContext) error {
 },
 ```
 
-### 11.5 Thinking Time & Interaction Delay
+### 11.6 Thinking Time & Interaction Delay
 
 Thinking time simulates human reading, processing, or decision delays between user actions, conversation turns, or multi-step requests. Thinking time is **explicitly invoked by the test developer** using `ctx.Sleep()`, which actively respects `ctx.Done()` for immediate cancellation during ramp-down or teardown.
 
@@ -1292,8 +1374,6 @@ RunVU: func(ctx vuhive.VUContext) error {
     return nil
 },
 ```
-
-#### Option B: Explicit Duration Sleep
 
 Pass an explicit duration to override scenario defaults:
 
@@ -1464,19 +1544,28 @@ RunVU: func(ctx vuhive.VUContext) error {
 
 ---
 
-## 13. Reference Implementations (`examples/`)
+## 13. Real-World Architecture Examples
 
-The repository includes a comprehensive set of compilable, self-contained example suites under [`examples/`](../examples/README.md). Each example is paired with an in-process mock server (`httptest.Server` or simulated domain model), a companion `vuhive.yaml` configuration, and a dedicated `README.md` reference guide.
+For complete runnable architecture patterns, see the following implementations:
+- **Event-Driven E-Commerce**: Multi-step checkout journey with inline assertions and thinking time in [`examples/http_checkout/`](../examples/http_checkout/).
+- **Conversational AI Flow**: Stateful multi-turn chat assistant load test over Server-Sent Events (SSE) in [`examples/conversation_flow/`](../examples/conversation_flow/).
+- **Microservices gRPC User Service**: Token-bucket open system workload generator measuring latency under controlled arrival rates in [`examples/grpc_user_service/`](../examples/grpc_user_service/).
+- **Kafka Event Streaming**: High-throughput message publication and consumption with offset commit verification in [`examples/kafka/`](../examples/kafka/).
+- **NATS Messaging & RPC**: Core NATS pub/sub, synchronous Request-Reply RPC, and Queue Subscriptions in [`examples/nats/`](../examples/nats/).
 
-See the [**Examples Reference Suite Index**](../examples/README.md) for a structured 3-tier learning path and full capability matrix.
+---
 
-| Example | Directory | Core Concepts | Guide |
+## 14. Example Inventory & Reference Index
+
+The table below catalogs all reference examples available under [`examples/`](../examples/):
+
+| Example | Directory | Pacing & Focus Area | Documentation |
 |---|---|---|---|
-| **HTTP REST Checkout** | [`examples/http_checkout/`](../examples/http_checkout/) | Standard REST API load test, HDR duration histogram, success rate, constant VU concurrency. | [Read Guide](../examples/http_checkout/README.md) |
-| **HTTP Module (Auto-Metrics)** | [`examples/http_module/`](../examples/http_module/) | Built-in `pkg/vuhive/http` client, automatic metrics, JSON parsing, inline checks. | [Read Guide](../examples/http_module/README.md) |
-| **Inline Checks (Assertions)** | [`examples/checks/`](../examples/checks/) | Inline assertions (`ctx.Check`), non-aborting validations, auto-instrumented check counters and report tables. | [Read Guide](../examples/checks/README.md) |
-| **Transaction Groups** | [`examples/groups/`](../examples/groups/) | Transaction boundaries (`ctx.Group`), nested groups, group-scoped duration metrics, threshold targeting. | [Read Guide](../examples/groups/README.md) |
-| **Thinking Time & Delays** | [`examples/think_time/`](../examples/think_time/) | Multi-step journey, declarative `interaction_delay` (`range`), `ctx.Sleep()`, programmatic `ExpoDelay`. | [Read Guide](../examples/think_time/README.md) |
+| **HTTP E-Commerce Checkout** | [`examples/http_checkout/`](../examples/http_checkout/) | Multi-step HTTP workflow, state passing, inline checks, metrics recording. | [Read Guide](../examples/http_checkout/README.md) |
+| **Instrumented HTTP Client** | [`examples/http_module/`](../examples/http_module/) | `pkg/vuhive/http` client module, JSON body helpers, automatic telemetry. | [Read Guide](../examples/http_module/README.md) |
+| **Inline Checks & Assertions** | [`examples/checks/`](../examples/checks/) | HTTP header/body validations with `ctx.Check()`, check summary tables. | [Read Guide](../examples/checks/README.md) |
+| **Transaction Groups** | [`examples/groups/`](../examples/groups/) | Named transaction steps (`ctx.Group`), group duration telemetry, per-step SLAs. | [Read Guide](../examples/groups/README.md) |
+| **Thinking Time & Pacing** | [`examples/think_time/`](../examples/think_time/) | Human delays with `ctx.Sleep()`, mathematical distributions (`ExpoDelay`). | [Read Guide](../examples/think_time/README.md) |
 | **Data Parameterization** | [`examples/data_parameterization/`](../examples/data_parameterization/) | `pkg/vuhive/data` dataset ingestion (CSV, JSON, JSONL) with `Sequential`, `Random`, and `SharedQueue` strategies. | [Read Guide](../examples/data_parameterization/README.md) |
 | **Ramping VUs Spike Test** | [`examples/ramping_vus/`](../examples/ramping_vus/) | Multi-stage spike test with dynamic VU scaling and recovery observation (`ramping_vus`). | [Read Guide](../examples/ramping_vus/README.md) |
 | **SLA Thresholds & Quality Gates** | [`examples/sla_thresholds/`](../examples/sla_thresholds/) | Multi-metric thresholds, percentile gates, rate assertions, and early test termination with `abort_on_fail`. | [Read Guide](../examples/sla_thresholds/README.md) |
@@ -1485,6 +1574,7 @@ See the [**Examples Reference Suite Index**](../examples/README.md) for a struct
 | **Server-Sent Events (SSE)** | [`examples/sse_streaming/`](../examples/sse_streaming/) | Built-in `pkg/vuhive/http` Server-Sent Events (SSE) streaming, TTFE latency, token throughput. | [Read Guide](../examples/sse_streaming/README.md) |
 | **gRPC RPC Service** | [`examples/grpc_user_service/`](../examples/grpc_user_service/) | Open-system arrival rate pacing (`arrival_rate`), target TPS, bounded worker pool (`max_vus`). | [Read Guide](../examples/grpc_user_service/README.md) |
 | **Kafka Event Streaming** | [`examples/kafka/`](../examples/kafka/) | High-throughput Kafka Publisher & Consumer (`pkg/vuhive/kafka`), conditional compilation with `-tags kafka`. | [Read Guide](../examples/kafka/README.md) |
+| **NATS Messaging & RPC** | [`examples/nats/`](../examples/nats/) | High-throughput NATS Publisher, Subscriber & RPC (`pkg/vuhive/nats`), conditional compilation with `-tags nats`. | [Read Guide](../examples/nats/README.md) |
 
 ### Running Examples
 

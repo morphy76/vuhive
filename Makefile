@@ -23,7 +23,7 @@ test-integration:
 ## test-examples: Build example binaries to verify they compile
 .PHONY: test-examples
 test-examples:
-	go build -tags="vuhive_example kafka" ./examples/...
+	go build -tags="vuhive_example kafka nats" ./examples/...
 
 ## test-race: Run unit tests with race detector
 .PHONY: test-race
