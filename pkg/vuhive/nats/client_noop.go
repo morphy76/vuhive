@@ -55,9 +55,7 @@ func (s *noopSubscriber) Close() error {
 	return nil
 }
 
-type noopJetStreamClient struct {
-	cfg clientConfig
-}
+type noopJetStreamClient struct{}
 
 func (j *noopJetStreamClient) Publish(ctx context.Context, subject string, data []byte) error {
 	return ErrNATSDisabled
