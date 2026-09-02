@@ -135,7 +135,7 @@ scenarios:
 			field: "scenarios.s1.run_period",
 		},
 		{
-			name: "missing vu_timeout",
+			name: "negative vu_timeout",
 			yaml: `
 version: "1.0"
 scenarios:
@@ -143,6 +143,7 @@ scenarios:
     type: "constant_vus"
     vus: 1
     run_period: "10s"
+    vu_timeout: "-1s"
 `,
 			field: "scenarios.s1.vu_timeout",
 		},
@@ -158,6 +159,20 @@ scenarios:
 			assert.Equal(t, tt.field, valErr.Field)
 		})
 	}
+
+	t.Run("omitted vu_timeout defaults to guard deadline", func(t *testing.T) {
+		yaml := `
+version: "1.0"
+scenarios:
+  s1:
+    type: "constant_vus"
+    vus: 1
+    run_period: "10s"
+`
+		cfg, err := config.Load(strings.NewReader(yaml))
+		require.NoError(t, err)
+		assert.Equal(t, config.DefaultGuardDeadline, cfg.Scenarios["s1"].VUTimeout)
+	})
 }
 
 // AC-1.2.3: Unknown scenario in default_scenario returns ValidationError

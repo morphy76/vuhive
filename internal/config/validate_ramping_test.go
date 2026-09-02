@@ -85,7 +85,24 @@ func TestValidate_RampingVUsScenarios(t *testing.T) {
 			field:         "scenarios.spike_test.stages[0].duration",
 		},
 		{
-			name: "missing vu_timeout in ramping_vus",
+			name: "negative vu_timeout in ramping_vus",
+			cfg: &config.Config{
+				Version: "1.0",
+				Scenarios: map[string]config.ScenarioConfig{
+					"spike_test": {
+						Type: config.ScenarioTypeRampingVUs,
+						Stages: []config.StageConfig{
+							{Target: 10, Duration: 10 * time.Second},
+						},
+						VUTimeout: -1 * time.Second,
+					},
+				},
+			},
+			expectedError: "must be >= 0",
+			field:         "scenarios.spike_test.vu_timeout",
+		},
+		{
+			name: "omitted vu_timeout in ramping_vus defaults to guard deadline",
 			cfg: &config.Config{
 				Version: "1.0",
 				Scenarios: map[string]config.ScenarioConfig{
@@ -97,8 +114,7 @@ func TestValidate_RampingVUsScenarios(t *testing.T) {
 					},
 				},
 			},
-			expectedError: "must be > 0",
-			field:         "scenarios.spike_test.vu_timeout",
+			expectedError: "",
 		},
 	}
 
@@ -113,6 +129,9 @@ func TestValidate_RampingVUsScenarios(t *testing.T) {
 				assert.Equal(t, tt.field, valErr.Field)
 			} else {
 				require.NoError(t, err)
+				if tt.name == "omitted vu_timeout in ramping_vus defaults to guard deadline" {
+					assert.Equal(t, config.DefaultGuardDeadline, tt.cfg.Scenarios["spike_test"].VUTimeout)
+				}
 			}
 		})
 	}

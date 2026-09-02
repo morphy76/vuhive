@@ -914,5 +914,99 @@ func TestValidate_SupervisorAndStartupQuorum(t *testing.T) {
 		require.True(t, errors.As(err, &valErr))
 		assert.Equal(t, "scenarios.s1.startup_grace_period", valErr.Field)
 	})
+
+	t.Run("vu_timeout defaulted to guard deadline when unset", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:      config.ScenarioTypeConstantVUs,
+					VUs:       10,
+					RunPeriod: 10 * time.Second,
+					VUTimeout: 0,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, config.DefaultGuardDeadline, cfg.Scenarios["s1"].VUTimeout)
+	})
+
+	t.Run("vu_timeout zero allowed when allow_unbounded_iterations is true", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:                     config.ScenarioTypeConstantVUs,
+					VUs:                      10,
+					RunPeriod:                10 * time.Second,
+					VUTimeout:                0,
+					AllowUnboundedIterations: true,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, time.Duration(0), cfg.Scenarios["s1"].VUTimeout)
+	})
+
+	t.Run("negative vu_timeout invalid", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:      config.ScenarioTypeConstantVUs,
+					VUs:       10,
+					RunPeriod: 10 * time.Second,
+					VUTimeout: -1 * time.Second,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.Error(t, err)
+		var valErr *config.ValidationError
+		require.True(t, errors.As(err, &valErr))
+		assert.Equal(t, "scenarios.s1.vu_timeout", valErr.Field)
+	})
+
+	t.Run("negative watchdog_stall_threshold invalid", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:                   config.ScenarioTypeConstantVUs,
+					VUs:                    10,
+					RunPeriod:              10 * time.Second,
+					VUTimeout:              1 * time.Second,
+					WatchdogStallThreshold: -1 * time.Second,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.Error(t, err)
+		var valErr *config.ValidationError
+		require.True(t, errors.As(err, &valErr))
+		assert.Equal(t, "scenarios.s1.watchdog_stall_threshold", valErr.Field)
+	})
+
+	t.Run("negative watchdog_interval invalid", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:             config.ScenarioTypeConstantVUs,
+					VUs:              10,
+					RunPeriod:        10 * time.Second,
+					VUTimeout:        1 * time.Second,
+					WatchdogInterval: -1 * time.Second,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.Error(t, err)
+		var valErr *config.ValidationError
+		require.True(t, errors.As(err, &valErr))
+		assert.Equal(t, "scenarios.s1.watchdog_interval", valErr.Field)
+	})
 }
 

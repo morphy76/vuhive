@@ -53,6 +53,9 @@ func RunConstantVUs(
 		interval = cfg.RampUp / time.Duration(cfg.VUs)
 	}
 
+	wd := NewExecutionWatchdog(runCtx, cfg, logger, metrics)
+	defer wd.Stop()
+
 	for i := 1; i <= cfg.VUs; i++ {
 		if i > 1 && interval > 0 {
 			select {
@@ -66,7 +69,7 @@ func RunConstantVUs(
 
 		wg.Add(1)
 		vuid := int64(i)
-		go runVUGoroutine(runCtx, stopCh, scenario, cfg, scenarioName, vuid, globalState, logger, metrics, gate, &wg)
+		go runVUGoroutine(runCtx, stopCh, scenario, cfg, scenarioName, vuid, globalState, logger, metrics, gate, wd, &wg)
 	}
 
 	// Startup Quorum Gate: await readiness before counting scenario execution time
@@ -114,6 +117,7 @@ func runVUGoroutine(
 	logger log.Logger,
 	metrics metric.Collector,
 	gate *StartupQuorumGate,
+	wd ExecutionWatchdog,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
@@ -121,6 +125,9 @@ func runVUGoroutine(
 	activeGauge := metrics.Gauge(metric.MetricVUActive, metric.Tags{})
 	activeGauge.Add(1)
 	defer activeGauge.Add(-1)
+
+	tracker := wd.RegisterVU(vuid)
+	defer tracker.Unregister()
 
 	sCtx := newVUScenarioContext(ctx, vuid, cfg, scenarioName, globalState, logger, metrics)
 
@@ -151,7 +158,7 @@ func runVUGoroutine(
 	}
 
 	im := newIterationMetrics(metrics)
-	hasTimeout := cfg.VUTimeout > 0
+	effectiveTimeout, hasTimeout := getEffectiveVUTimeout(cfg)
 	var iteration int64
 	for {
 		select {
@@ -162,8 +169,9 @@ func runVUGoroutine(
 		default:
 		}
 
+		tracker.Begin(iteration)
 		if hasTimeout {
-			iterCtx, cancel := context.WithTimeout(ctx, cfg.VUTimeout)
+			iterCtx, cancel := context.WithTimeout(ctx, effectiveTimeout)
 			sCtx.prepareIteration(iterCtx, iteration)
 			executeIteration(ctx, iterCtx, sCtx, scenario.RunVU, im, logger)
 			cancel()
@@ -171,6 +179,7 @@ func runVUGoroutine(
 			sCtx.prepareIteration(ctx, iteration)
 			executeIteration(ctx, ctx, sCtx, scenario.RunVU, im, logger)
 		}
+		tracker.End()
 
 		iteration++
 	}

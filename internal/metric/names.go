@@ -29,6 +29,9 @@ const (
 	// MetricVURestartsTotal tracks the total number of supervisor worker restart/retry attempts.
 	MetricVURestartsTotal = "vuhive.vu.restarts_total"
 
+	// MetricVUStalledIterations tracks the total number of stalled VU iterations detected by the watchdog.
+	MetricVUStalledIterations = "vuhive.vu.stalled_iterations"
+
 	// MetricPacingDroppedIterations tracks the number of arrival-rate iterations dropped due to pool saturation.
 	MetricPacingDroppedIterations = "vuhive.pacing.dropped_iterations"
 

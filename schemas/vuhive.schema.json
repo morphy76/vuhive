@@ -309,8 +309,7 @@
     "scenario": {
       "type": "object",
       "required": [
-        "type",
-        "vu_timeout"
+        "type"
       ],
       "description": "Scenario load profile and pacing configuration.",
       "properties": {
@@ -451,11 +450,35 @@
         },
         "vu_timeout": {
           "$ref": "#/$defs/duration",
-          "description": "Per-iteration context execution timeout deadline (required).",
+          "description": "Per-iteration context execution timeout deadline (defaults to 30s guard deadline if omitted).",
           "examples": [
             "1s",
             "2s",
             "5s"
+          ]
+        },
+        "allow_unbounded_iterations": {
+          "type": "boolean",
+          "default": false,
+          "description": "Explicitly disables mandatory guard deadlines when vu_timeout is omitted or set to 0."
+        },
+        "watchdog_stall_threshold": {
+          "$ref": "#/$defs/duration",
+          "description": "Custom duration threshold to flag stuck/hanging VU iterations (defaults to 3x vu_timeout, 3x p99, or 30s).",
+          "examples": [
+            "500ms",
+            "5s",
+            "30s"
+          ]
+        },
+        "watchdog_interval": {
+          "$ref": "#/$defs/duration",
+          "default": "500ms",
+          "description": "Periodic polling interval for the execution watchdog to detect stalled VU worker routines.",
+          "examples": [
+            "100ms",
+            "500ms",
+            "1s"
           ]
         },
         "params": {

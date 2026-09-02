@@ -369,6 +369,12 @@ To prevent silent pool shrinkage and invalid test runs due to transient initiali
 - **Supervised Lifecycle (Supervisor Pattern)**: Automatically retries `PreTest` failures and recovered panics with exponential backoff and jitter up to `max_pretest_retries` (default: `3`). Tracks retry attempts via `vuhive.vu.restarts_total`.
 - **Startup Quorum Health Gate**: Optionally asserts a minimum fraction of healthy initialized VUs (`min_ready_ratio: 0.9` for 90%) within `startup_grace_period` (default: `10s`). If dropout exceeds the threshold, the test aborts fast with `ErrStartupQuorumFailed` before counting scenario execution time.
 
+### Mandatory Guard Deadlines & Execution Watchdog
+
+To eliminate permanent VU deadlocks and goroutine leaks from unhandled blocking operations:
+- **Mandatory Guard Deadlines**: When `vu_timeout` is omitted or set to `0`, vuhive automatically enforces a safety guard deadline (`30s`), ensuring every iteration context (`iterCtx`) has an active deadline. Developers can explicitly opt in to unbounded iterations using `allow_unbounded_iterations: true`.
+- **Execution Watchdog & Stuck VU Detector**: A lightweight, lock-free background watchdog monitors in-flight iterations. If an iteration exceeds the configured stall threshold (`watchdog_stall_threshold`, $3 \times \text{p99}$, or `vu_timeout`), vuhive emits structured `WARN` logs (`vu_id`, `iteration`, `duration`, `threshold`) and increments `vuhive.vu.stalled_iterations`. Check intervals can be customized via `watchdog_interval` (default: `500ms`).
+
 
 ---
 
