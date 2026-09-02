@@ -126,10 +126,7 @@ func GenerateJSONReport(w io.Writer, data ReportData) error {
 	}
 
 	for _, d := range data.StrictDiagnostics {
-		doc.StrictDiagnostics = append(doc.StrictDiagnostics, jsonStrictEntry{
-			Kind:    d.Kind,
-			Message: d.Message,
-		})
+		doc.StrictDiagnostics = append(doc.StrictDiagnostics, jsonStrictEntry(d))
 	}
 
 

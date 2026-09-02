@@ -133,10 +133,7 @@ func convertStrictDiagnostics(diagnostics []StrictDiagnostic) []report.StrictDia
 	}
 	entries := make([]report.StrictDiagnosticEntry, len(diagnostics))
 	for i, d := range diagnostics {
-		entries[i] = report.StrictDiagnosticEntry{
-			Kind:    d.Kind,
-			Message: d.Message,
-		}
+		entries[i] = report.StrictDiagnosticEntry(d)
 	}
 	return entries
 }
