@@ -67,9 +67,10 @@ type SummaryData struct {
 	Checks      []CheckSummary
 	Groups      []GroupSummary
 	Thresholds  []ThresholdSummary
-	Passed      bool
-	Aborted     bool
-	AbortReason string
+	Passed            bool
+	Aborted           bool
+	AbortReason       string
+	StrictDiagnostics []StrictDiagnosticEntry
 }
 
 

@@ -175,7 +175,11 @@ func runArrivalRateWorkerPool(
 	tracker := wd.RegisterVU(vuid)
 	defer tracker.Unregister()
 
-	sCtx := newVUScenarioContext(ctx, vuid, cfg, scenarioName, globalState, logger, metrics)
+	var ap *sync.Map
+	if p, ok := ctx.Value(accessedParamsKey{}).(*sync.Map); ok {
+		ap = p
+	}
+	sCtx := newVUScenarioContext(ctx, vuid, cfg, scenarioName, globalState, logger, metrics, ap)
 
 	// AfterTest is guaranteed to run after PreTest/RunVU exit.
 	defer func() {

@@ -46,6 +46,23 @@ const DefaultGuardDeadline = 30 * time.Second
 // DefaultWatchdogInterval is the default polling interval for the execution watchdog to detect stalled VU worker routines.
 const DefaultWatchdogInterval = 500 * time.Millisecond
 
+// StrictMode values for strict validation configuration.
+const (
+	// StrictModeOff disables strict validation diagnostics.
+	StrictModeOff = "off"
+
+	// StrictModeWarn enables strict validation with warning-level diagnostics.
+	StrictModeWarn = "warn"
+
+	// StrictModeFatal enables strict validation and fails execution if diagnostics are found.
+	StrictModeFatal = "fatal"
+)
+
+// IsStrictEnabled reports whether the given strict mode enables validation diagnostics.
+func IsStrictEnabled(mode string) bool {
+	return mode == StrictModeWarn || mode == StrictModeFatal
+}
+
 // ScenarioConfig holds the runtime configuration for a single load testing scenario.
 type ScenarioConfig struct {
 	// Type is the scenario execution model (constant_vus, arrival_rate, ramping_vus).
@@ -101,6 +118,9 @@ type ScenarioConfig struct {
 
 	// Params is an arbitrary key-value map available to test code via ScenarioContext.Param().
 	Params map[string]string
+
+	// StrictMode controls strict validation diagnostics: "off" (default), "warn", or "fatal".
+	StrictMode string
 
 	// InteractionDelay defines think time strategy between actions (via ctx.Sleep).
 	InteractionDelay *InteractionDelayConfig

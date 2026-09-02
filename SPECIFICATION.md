@@ -558,6 +558,8 @@ Built-in metric names are defined as exported package-level constants directly i
 | `--report-format` | string | `console` | Report format: `console` or `json` |
 | `--report-out` | string | *(stdout)* | Write final report to this file path instead of stdout |
 | `--json-report-out` | string | *(disabled)* | Write an additional JSON report document to this file path. Console report is always printed to stdout regardless of this flag |
+| `--strict` | bool | false | Enable strict validation mode (warn level) |
+| `--strict-fatal` | bool | false | Enable strict validation mode (fatal level) |
 | `--version` | bool | false | Print library version and exit |
 
 ---
@@ -580,6 +582,7 @@ Built-in metric names are defined as exported package-level constants directly i
 | `scenarios.<name>.ramp_down` | duration string | no | `"0s"` | ≥ 0 |
 | `scenarios.<name>.drain` | duration string | no | `"0s"` | Grace period for in-flight VUs to complete after active dispatch (alias: `drain_period`); ≥ 0 |
 | `scenarios.<name>.vu_timeout` | duration string | yes | — | > 0 |
+| `scenarios.<name>.strict` | string | no | `"off"` | Validation mode: `"off"`, `"warn"`, or `"fatal"` |
 | `scenarios.<name>.params` | map[string]string | no | `{}` | Keys and values must be non-empty strings |
 | `scenarios.<name>.interaction_delay` | object | no | — | Thinking time strategy explicitly invoked via `ctx.Sleep()` (see §11, Increment 1.12) |
 | `scenarios.<name>.think_time` | object | no | — | Inter-iteration pacing delay executed by engine loop |
@@ -691,6 +694,34 @@ scenarios:
 version: "1.0"
 default_scenario: payment_processing
 ...
+```
+
+### 7.5 Strict Validation Mode
+
+Strict validation mode detects misconfigurations between the `vuhive.yaml` configuration file and the Go scenario execution code. It catches two types of silent errors:
+1. **Unused YAML parameters**: Parameters declared in `params:` that are never accessed via `ctx.Param()`, `ctx.ParamInt()`, or `ctx.ParamDuration()` during execution.
+2. **Unmatched threshold metrics**: Thresholds configured for metrics that were never recorded during scenario execution (e.g. detecting metric name typos).
+
+#### Configuration & Priority
+
+Strict mode can be configured via YAML at the scenario level or globally via CLI flags.
+- **YAML**: `strict: off | warn | fatal` (default: `off`)
+- **CLI**: `--strict` (equivalent to `warn`), `--strict-fatal` (equivalent to `fatal`)
+
+Resolution priority: `--strict-fatal` > `--strict` > YAML `strict:` setting.
+
+#### Behavior Modes
+
+- `off`: No diagnostics are collected or emitted (default).
+- `warn`: Emits WARN-level log messages during execution and includes diagnostics in the report. The test still passes if SLAs are met.
+- `fatal`: Like `warn`, but forces the test to fail (exit code 1) if any diagnostics are found, regardless of SLA results.
+
+Example Diagnostic Output:
+```text
+STRICT VALIDATION DIAGNOSTICS
+────────────────────────────────────────────────────────────────
+  [STRICT WARNING]  unused_param       declared param "chekout_path" was never accessed during scenario execution
+  [STRICT WARNING]  unmatched_threshold threshold metric "http_req_duratoin" (stat: p95) was never recorded during scenario execution
 ```
 
 ---

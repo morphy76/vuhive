@@ -67,10 +67,28 @@ func RunSuite(s ScenarioRegistry, args []string, stdout io.Writer) Result {
 		return Result{Error: execErr}
 	}
 
+	// Evaluate strict diagnostics
+	var strictDiagnostics []StrictDiagnostic
+	strictMode := ResolveStrictMode(
+		resolved.Flags.Strict,
+		resolved.Flags.StrictFatal,
+		resolved.ScenarioCfg.StrictMode,
+	)
+	if config.IsStrictEnabled(strictMode) {
+		unusedParams := engine.UnusedParams(executor.SetupCtx)
+		strictDiagnostics = EvaluateStrictDiagnostics(resolved.ScenarioCfg, unusedParams, metricsStore)
+		for _, d := range strictDiagnostics {
+			logger.Warn().Str("kind", d.Kind).Msg(d.Message)
+		}
+	}
+
 	// Evaluate SLA thresholds
 	thresholdResults := sla.Evaluate(resolved.ScenarioCfg.Thresholds, metricsStore)
 	allPassed := sla.AllPassed(thresholdResults)
 	if executor.Aborted {
+		allPassed = false
+	}
+	if strictMode == config.StrictModeFatal && len(strictDiagnostics) > 0 {
 		allPassed = false
 	}
 
@@ -82,6 +100,7 @@ func RunSuite(s ScenarioRegistry, args []string, stdout io.Writer) Result {
 		Flags:            resolved.Flags,
 		MetricsStore:     metricsStore,
 		ThresholdResults: thresholdResults,
+		StrictDiagnostics: strictDiagnostics,
 		AllPassed:        allPassed,
 		Aborted:          executor.Aborted,
 		AbortReason:      executor.AbortReason,

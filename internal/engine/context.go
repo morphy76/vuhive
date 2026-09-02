@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/morphy76/vuhive/internal/config"
@@ -136,7 +137,10 @@ type scenarioContext struct {
 	checkCache    map[string]checkCounterPair
 	groupCache    map[string]metric.Duration
 	childContexts map[string]*scenarioContext
+	accessedParams *sync.Map
 }
+
+type accessedParamsKey struct{}
 
 // NewScenarioContext constructs a ScenarioContext.
 func NewScenarioContext(
@@ -213,6 +217,7 @@ func newScenarioContext(
 		checkCache:    make(map[string]checkCounterPair, 4),
 		groupCache:    make(map[string]metric.Duration, 4),
 		childContexts: make(map[string]*scenarioContext, 4),
+		accessedParams: &sync.Map{},
 	}
 }
 
@@ -225,6 +230,7 @@ func newVUScenarioContext(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
+	accessedParams *sync.Map,
 ) *scenarioContext {
 	boundLogger := logger
 	if b, ok := logger.(scenarioBinder); ok {
@@ -274,6 +280,7 @@ func newVUScenarioContext(
 		checkCache:    make(map[string]checkCounterPair, 4),
 		groupCache:    make(map[string]metric.Duration, 4),
 		childContexts: make(map[string]*scenarioContext, 4),
+		accessedParams: accessedParams,
 	}
 }
 
@@ -301,7 +308,13 @@ func (c *scenarioContext) Param(key string) string {
 	if c.params == nil {
 		return ""
 	}
-	return c.params[key]
+	v, ok := c.params[key]
+	if ok && c.accessedParams != nil {
+		if _, loaded := c.accessedParams.Load(key); !loaded {
+			c.accessedParams.Store(key, struct{}{})
+		}
+	}
+	return v
 }
 
 func (c *scenarioContext) ParamInt(key string, defaultValue int) int {
@@ -523,6 +536,7 @@ func (c *scenarioContext) Group(name string, fn func(ctx VUContext) error) error
 			checkCache:    c.checkCache,
 			groupCache:    c.groupCache,
 			childContexts: c.childContexts,
+			accessedParams: c.accessedParams,
 		}
 		c.childContexts[groupPath] = child
 	} else {

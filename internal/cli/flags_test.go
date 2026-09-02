@@ -21,6 +21,8 @@ func TestParseFlagsDefaults(t *testing.T) {
 	assert.Equal(t, "console", flags.ReportFormat)
 	assert.Equal(t, "", flags.ReportOut)
 	assert.False(t, flags.ShowVersion)
+	assert.False(t, flags.Strict)
+	assert.False(t, flags.StrictFatal)
 }
 
 func TestParseFlagsCustomValues(t *testing.T) {
@@ -33,6 +35,8 @@ func TestParseFlagsCustomValues(t *testing.T) {
 		"--report-format", "json",
 		"--report-out", "report.json",
 		"--version",
+		"--strict",
+		"--strict-fatal",
 	}
 
 	flags, err := cli.ParseFlags(args, &errBuf)
@@ -45,6 +49,8 @@ func TestParseFlagsCustomValues(t *testing.T) {
 	assert.Equal(t, "json", flags.ReportFormat)
 	assert.Equal(t, "report.json", flags.ReportOut)
 	assert.True(t, flags.ShowVersion)
+	assert.True(t, flags.Strict)
+	assert.True(t, flags.StrictFatal)
 }
 
 func TestParseFlagsInvalidFlagReturnsError(t *testing.T) {

@@ -54,6 +54,14 @@ var validOnNoData = map[string]bool{
 	"skip":   true,
 }
 
+// validStrictModes is the set of supported strict mode values.
+var validStrictModes = map[string]bool{
+	"":      true,
+	"off":   true,
+	"warn":  true,
+	"fatal": true,
+}
+
 // InferredMetricKind returns the metric kind string ("duration", "counter", "rate", "gauge") for a stat.
 func InferredMetricKind(stat string) string {
 	if IsDurationStat(stat) {
@@ -409,6 +417,13 @@ func validateScenario(name string, sc *ScenarioConfig) error {
 		}
 	}
 
+	// Validate strict mode if specified.
+	if !validStrictModes[sc.StrictMode] {
+		return &ValidationError{
+			Field:   prefix + ".strict",
+			Message: fmt.Sprintf("must be one of {off, warn, fatal}, got %q", sc.StrictMode),
+		}
+	}
 
 	// Validate params: keys and values must be non-empty strings.
 	for k, v := range sc.Params {

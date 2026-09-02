@@ -523,8 +523,81 @@ func TestScenarioContext_CheckConvenienceMethods(t *testing.T) {
 	})
 }
 
+func TestStrict_ParamAccessTracking_RecordsAccessedKeys(t *testing.T) {
+	logger, metrics := newTestDeps()
+	cfg := config.ScenarioConfig{
+		Params: map[string]string{
+			"base_url": "http://example.com",
+			"timeout":  "5s",
+			"retries":  "3",
+		},
+	}
+	ctx := engine.NewScenarioContext(context.Background(), 1, 1, cfg, "test", nil, logger, metrics)
 
+	ctx.Param("base_url")
+	ctx.ParamDuration("timeout", 0)
+	ctx.ParamInt("retries", 0)
 
+	unused := engine.UnusedParams(ctx)
+	assert.Nil(t, unused)
+}
 
+func TestStrict_UnusedParams_ReturnsUnaccessed(t *testing.T) {
+	logger, metrics := newTestDeps()
+	cfg := config.ScenarioConfig{
+		Params: map[string]string{
+			"used":    "value",
+			"unused1": "v1",
+			"unused2": "v2",
+		},
+	}
+	ctx := engine.NewScenarioContext(context.Background(), 1, 1, cfg, "test", nil, logger, metrics)
 
+	ctx.Param("used")
 
+	unused := engine.UnusedParams(ctx)
+	assert.Equal(t, []string{"unused1", "unused2"}, unused)
+}
+
+func TestStrict_AllParamsAccessed_ReturnsNil(t *testing.T) {
+	logger, metrics := newTestDeps()
+	cfg := config.ScenarioConfig{
+		Params: map[string]string{
+			"only": "one",
+		},
+	}
+	ctx := engine.NewScenarioContext(context.Background(), 1, 1, cfg, "test", nil, logger, metrics)
+
+	ctx.Param("only")
+
+	unused := engine.UnusedParams(ctx)
+	assert.Nil(t, unused)
+}
+
+func TestStrict_NoParams_ReturnsNil(t *testing.T) {
+	logger, metrics := newTestDeps()
+	cfg := config.ScenarioConfig{} // No params
+	ctx := engine.NewScenarioContext(context.Background(), 1, 1, cfg, "test", nil, logger, metrics)
+
+	unused := engine.UnusedParams(ctx)
+	assert.Nil(t, unused)
+}
+
+func TestStrict_ParamAccessTracking_SharedAcrossGroupContexts(t *testing.T) {
+	logger, metrics := newTestDeps()
+	cfg := config.ScenarioConfig{
+		Params: map[string]string{
+			"group_param": "val",
+		},
+	}
+	ctx := engine.NewScenarioContext(context.Background(), 1, 1, cfg, "test", nil, logger, metrics)
+
+	err := ctx.Group("my_group", func(vCtx engine.VUContext) error {
+		vCtx.Param("group_param")
+		return nil
+	})
+	require.NoError(t, err)
+
+	unused := engine.UnusedParams(ctx)
+	assert.Nil(t, unused)
+}

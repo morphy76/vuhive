@@ -825,6 +825,34 @@ When an early stop is triggered:
 
 This makes vuhive suitable for CI/CD pipelines where exit code drives the build status.
 
+### 8.3 Strict Validation Mode
+
+Strict validation mode detects misconfigurations between the `vuhive.yaml` configuration file and the Go scenario execution code. It catches two types of silent errors:
+1. **Unused YAML parameters**: Parameters declared in `params:` that are never accessed via `ctx.Param()`, `ctx.ParamInt()`, or `ctx.ParamDuration()` during execution.
+2. **Unmatched threshold metrics**: Thresholds configured for metrics that were never recorded during scenario execution (e.g. detecting metric name typos).
+
+#### Configuration & Priority
+
+Strict mode can be configured via YAML at the scenario level or globally via CLI flags.
+- **YAML**: `strict: off | warn | fatal` (default: `off`)
+- **CLI**: `--strict` (equivalent to `warn`), `--strict-fatal` (equivalent to `fatal`)
+
+Resolution priority: `--strict-fatal` > `--strict` > YAML `strict:` setting.
+
+#### Behavior Modes
+
+- `off`: No diagnostics are collected or emitted (default).
+- `warn`: Emits WARN-level log messages during execution and includes diagnostics in the report. The test still passes if SLAs are met.
+- `fatal`: Like `warn`, but forces the test to fail (exit code 1) if any diagnostics are found, regardless of SLA results.
+
+Example Diagnostic Output:
+```text
+STRICT VALIDATION DIAGNOSTICS
+────────────────────────────────────────────────────────────────
+  [STRICT WARNING]  unused_param       declared param "chekout_path" was never accessed during scenario execution
+  [STRICT WARNING]  unmatched_threshold threshold metric "http_req_duratoin" (stat: p95) was never recorded during scenario execution
+```
+
 ---
 
 ## 9. Pacing Modes
@@ -917,6 +945,8 @@ go run main.go --config vuhive.yaml --scenario my_scenario
 | `--report-format` | `console` | `console` or `json` |
 | `--report-out` | *(stdout)* | Write report to file |
 | `--json-report-out` | *(disabled)* | Write additional JSON report to file |
+| `--strict` | `false` | Enable strict validation mode (warn) |
+| `--strict-fatal` | `false` | Enable strict validation mode (fatal) |
 | `--version` | `false` | Print version and exit |
 
 ---

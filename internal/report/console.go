@@ -19,6 +19,7 @@ func GenerateConsoleReport(w io.Writer, data ReportData) error {
 	writeChecks(&sb, data)
 	writeGroups(&sb, data)
 	writeCustomMetrics(&sb, data)
+	writeStrictDiagnostics(&sb, data)
 	writeSLAResults(&sb, data)
 	writeVerdict(&sb, data)
 
@@ -212,6 +213,18 @@ func writeSLAResults(sb *strings.Builder, data ReportData) {
 		fmt.Fprintf(sb, "  %-6s  %-23s %-15s → actual: %s\n", status, th.Metric, expr, th.Actual)
 	}
 	sb.WriteString("────────────────────────────────────────────────────────────────\n")
+}
+
+func writeStrictDiagnostics(sb *strings.Builder, data ReportData) {
+	if len(data.StrictDiagnostics) == 0 {
+		return
+	}
+	sb.WriteString("STRICT VALIDATION DIAGNOSTICS\n")
+	sb.WriteString("────────────────────────────────────────────────────────────────\n")
+	for _, d := range data.StrictDiagnostics {
+		fmt.Fprintf(sb, "  [STRICT WARNING]  %-18s %s\n", d.Kind, d.Message)
+	}
+	sb.WriteString("\n")
 }
 
 func writeVerdict(sb *strings.Builder, data ReportData) {

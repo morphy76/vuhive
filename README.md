@@ -376,6 +376,37 @@ To eliminate permanent VU deadlocks and goroutine leaks from unhandled blocking 
 - **Execution Watchdog & Stuck VU Detector**: A lightweight, lock-free background watchdog monitors in-flight iterations. If an iteration exceeds the configured stall threshold (`watchdog_stall_threshold`, $3 \times \text{p99}$, or `vu_timeout`), vuhive emits structured `WARN` logs (`vu_id`, `iteration`, `duration`, `threshold`) and increments `vuhive.vu.stalled_iterations`. Check intervals can be customized via `watchdog_interval` (default: `500ms`).
 
 
+### Strict Validation Mode
+
+Strict validation mode detects misconfigurations between the `vuhive.yaml` configuration file and the Go scenario code. It catches two types of silent errors:
+1. **Unused YAML parameters**: Parameters declared in `params:` that are never accessed during execution.
+2. **Unmatched threshold metrics**: Thresholds configured for metrics that were never recorded during scenario execution (detects metric name typos).
+
+You can configure strict mode in `vuhive.yaml` (`strict: warn` or `strict: fatal`) or via CLI flags (`--strict` or `--strict-fatal`).
+
+**Example YAML Configuration**:
+```yaml
+scenarios:
+  checkout_flow:
+    type: constant_vus
+    strict: warn  # off | warn | fatal
+    vus: 10
+    run_period: 1m
+```
+
+**Example CLI Usage**:
+```bash
+go run main.go --config vuhive.yaml --strict-fatal
+```
+
+**Diagnostic Output**:
+```text
+STRICT VALIDATION DIAGNOSTICS
+────────────────────────────────────────────────────────────────
+  [STRICT WARNING]  unused_param       declared param "chekout_path" was never accessed during scenario execution
+  [STRICT WARNING]  unmatched_threshold threshold metric "http_req_duratoin" (stat: p95) was never recorded during scenario execution
+```
+
 ---
 
 ## Thinking Time & Interaction Delay Strategies
@@ -966,6 +997,8 @@ go run main.go [flags]
 | `--report-format` | `console` | Report format: `console` or `json`. |
 | `--report-out` | stdout | File path to write the primary summary report. |
 | `--json-report-out` | (none) | File path to write the JSON report document (§10.2 schema). |
+| `--strict` | `false` | Enable strict validation mode (warn level). |
+| `--strict-fatal` | `false` | Enable strict validation mode (fatal level). |
 | `--version` | `false` | Prints library version info and returns `0`. |
 
 ### Exit Code Contract

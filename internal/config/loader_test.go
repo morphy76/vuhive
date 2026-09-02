@@ -23,6 +23,7 @@ scenarios:
     run_period: "30s"
     ramp_down: "3s"
     vu_timeout: "2s"
+    strict: "warn"
     params:
       base_url: "https://api.example.com"
     thresholds:
@@ -69,6 +70,7 @@ func TestValidYAMLRoundTrips(t *testing.T) {
 	assert.Equal(t, 30*time.Second, checkout.RunPeriod)
 	assert.Equal(t, 3*time.Second, checkout.RampDown)
 	assert.Equal(t, 2*time.Second, checkout.VUTimeout)
+	assert.Equal(t, "warn", checkout.StrictMode)
 	assert.Equal(t, "https://api.example.com", checkout.Params["base_url"])
 	assert.Len(t, checkout.Thresholds, 2)
 
@@ -83,6 +85,22 @@ func TestValidYAMLRoundTrips(t *testing.T) {
 	assert.Equal(t, 5*time.Second, payment.RampDown)
 	assert.Equal(t, 3*time.Second, payment.VUTimeout)
 }
+
+func TestLoad_StrictMode_ParsedCorrectly(t *testing.T) {
+	yaml := `
+version: "1.0"
+scenarios:
+  s1:
+    type: "constant_vus"
+    vus: 1
+    run_period: "10s"
+    strict: "warn"
+`
+	cfg, err := config.Load(strings.NewReader(yaml))
+	require.NoError(t, err)
+	assert.Equal(t, "warn", cfg.Scenarios["s1"].StrictMode)
+}
+
 
 // AC-1.2.2: Missing required field returns ValidationError
 func TestMissingRequiredFieldReturnsValidationError(t *testing.T) {
