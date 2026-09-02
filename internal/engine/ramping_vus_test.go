@@ -62,7 +62,8 @@ func TestRunRampingVUs_MultiStageLifecycle(t *testing.T) {
 	}
 
 	start := time.Now()
-	engine.RunRampingVUs(context.Background(), scenario, cfg, "spike_test", nil, logger, metrics)
+	err := engine.RunRampingVUs(context.Background(), scenario, cfg, "spike_test", nil, logger, metrics)
+	require.NoError(t, err)
 	elapsed := time.Since(start)
 
 	assert.GreaterOrEqual(t, elapsed, 150*time.Millisecond)
@@ -110,7 +111,7 @@ func TestRunRampingVUs_PreTestError(t *testing.T) {
 		},
 	}
 
-	engine.RunRampingVUs(context.Background(), scenario, cfg, "pretest_err_test", nil, logger, metrics)
+	_ = engine.RunRampingVUs(context.Background(), scenario, cfg, "pretest_err_test", nil, logger, metrics)
 
 	assert.True(t, afterCalled.Load())
 	assert.Equal(t, int64(1), metrics.AggregatedCounterValue(metric.MetricVUPretestErrors))
@@ -136,7 +137,7 @@ func TestRunRampingVUs_PanicRecovery(t *testing.T) {
 	}
 
 	require.NotPanics(t, func() {
-		engine.RunRampingVUs(context.Background(), scenario, cfg, "panic_test", nil, logger, metrics)
+		_ = engine.RunRampingVUs(context.Background(), scenario, cfg, "panic_test", nil, logger, metrics)
 	})
 
 	assert.Greater(t, metrics.AggregatedCounterValue(metric.MetricVUPanics), int64(0))
@@ -168,7 +169,7 @@ func TestRunRampingVUs_ContextCancellation(t *testing.T) {
 	}()
 
 	start := time.Now()
-	engine.RunRampingVUs(ctx, scenario, cfg, "cancel_test", nil, logger, metrics)
+	_ = engine.RunRampingVUs(ctx, scenario, cfg, "cancel_test", nil, logger, metrics)
 	elapsed := time.Since(start)
 
 	assert.Less(t, elapsed, 1*time.Second)
