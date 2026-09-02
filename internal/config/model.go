@@ -74,6 +74,15 @@ type ScenarioConfig struct {
 	// Drain is the dedicated grace period allowing in-flight VUs to terminate cleanly.
 	Drain time.Duration
 
+	// MaxPreTestRetries is the maximum number of PreTest retry attempts upon initialization failure (default 3).
+	MaxPreTestRetries int
+
+	// MinReadyRatio is the minimum ratio of healthy initialized VUs required before starting the test (0.0 to 1.0).
+	MinReadyRatio float64
+
+	// StartupGracePeriod is the maximum grace period to wait for startup quorum readiness.
+	StartupGracePeriod time.Duration
+
 	// VUTimeout is the per-iteration context timeout (required).
 	VUTimeout time.Duration
 

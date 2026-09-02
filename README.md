@@ -363,6 +363,12 @@ scenarios:
    - `vu_timeout`: Per-iteration timeout (`time.Duration`).
    - *Details and patterns in [Developer Guide](docs/GUIDE.md#ramping_vus-multi-stage-pacing).*
 
+### Supervised VU Lifecycle & Startup Quorum Gate
+
+To prevent silent pool shrinkage and invalid test runs due to transient initialization errors in `PreTest`:
+- **Supervised Lifecycle (Supervisor Pattern)**: Automatically retries `PreTest` failures and recovered panics with exponential backoff and jitter up to `max_pretest_retries` (default: `3`). Tracks retry attempts via `vuhive.vu.restarts_total`.
+- **Startup Quorum Health Gate**: Optionally asserts a minimum fraction of healthy initialized VUs (`min_ready_ratio: 0.9` for 90%) within `startup_grace_period` (default: `10s`). If dropout exceeds the threshold, the test aborts fast with `ErrStartupQuorumFailed` before counting scenario execution time.
+
 
 ---
 

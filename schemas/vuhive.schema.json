@@ -417,6 +417,38 @@
             "10s"
           ]
         },
+        "max_pretest_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3,
+          "description": "Maximum number of PreTest retry attempts upon initialization failure (default: 3).",
+          "examples": [
+            0,
+            3,
+            5
+          ]
+        },
+        "min_ready_ratio": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.0,
+          "description": "Minimum fraction of configured Virtual Users (0.0 to 1.0) that must pass PreTest before test execution begins.",
+          "examples": [
+            0.5,
+            0.9,
+            1.0
+          ]
+        },
+        "startup_grace_period": {
+          "$ref": "#/$defs/duration",
+          "default": "0s",
+          "description": "Maximum grace period to wait for startup quorum readiness before failing.",
+          "examples": [
+            "5s",
+            "10s"
+          ]
+        },
         "vu_timeout": {
           "$ref": "#/$defs/duration",
           "description": "Per-iteration context execution timeout deadline (required).",

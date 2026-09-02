@@ -592,6 +592,19 @@ func translateError(err error) error {
 	if errors.As(err, &setupErr) {
 		return &SetupError{Err: setupErr.Err}
 	}
+	var quorumErr *engine.StartupQuorumError
+	if errors.As(err, &quorumErr) {
+		return &StartupQuorumError{
+			Ready:    quorumErr.Ready,
+			Target:   quorumErr.Target,
+			Required: quorumErr.Required,
+			Ratio:    quorumErr.Ratio,
+			Err:      quorumErr.Err,
+		}
+	}
+	if errors.Is(err, engine.ErrStartupQuorumFailed) {
+		return ErrStartupQuorumFailed
+	}
 	return err
 }
 

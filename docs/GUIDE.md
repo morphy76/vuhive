@@ -251,6 +251,9 @@ scenarios:
     run_period: 30s              # steady-state duration (required)
     ramp_down: 5s                # active iteration dispatch ramp-down (optional, default 0)
     drain: 10s                   # grace period for in-flight VUs to complete before termination (optional, default 0)
+    max_pretest_retries: 3       # max PreTest retries on transient startup failure (optional, default 3)
+    min_ready_ratio: 0.9         # min fraction of healthy VUs required to start test (optional, default 0.0)
+    startup_grace_period: 10s    # timeout to achieve startup quorum (optional, default 10s)
     vu_timeout: 2s               # per-iteration context deadline (required)
 
 
@@ -599,6 +602,7 @@ All built-in metrics are exported as typed constants in `pkg/vuhive` (e.g. `vuhi
 | `vuhive.MetricIterationsTimeout` | `vuhive.vu.iterations_timeout` | Counter | Iterations exceeding `vu_timeout` |
 | `vuhive.MetricVUPanics` | `vuhive.vu.panics` | Counter | RunVU panics recovered |
 | `vuhive.MetricVUPretestErrors` | `vuhive.vu.pretest_errors` | Counter | PreTest hook failures |
+| `vuhive.MetricVURestartsTotal` | `vuhive.vu.restarts_total` | Counter | Supervisor worker restart/retry attempts on PreTest failure |
 | `vuhive.MetricVUActive` | `vuhive.vu.active` | Gauge | Currently active VU goroutines |
 | `vuhive.MetricIterationDuration` | `vuhive.vu.iteration_duration` | Duration | Completed VU iteration duration |
 | `vuhive.MetricPacingDroppedIterations` | `vuhive.pacing.dropped_iterations` | Counter | Arrival-rate tokens dropped due to pool saturation |

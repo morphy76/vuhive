@@ -455,6 +455,7 @@ func (s *Suite) Execute() ExecutionResult
 | Scenario in `--scenario` not registered | Returns `ExecutionResult{Error: *vuhive.ScenarioNotFoundError}` |
 | Scenario registered but not in config | Returns `ExecutionResult{Error: *vuhive.ScenarioNotFoundError}` |
 | `Setup` hook returns error | Returns `ExecutionResult{Error: *vuhive.SetupError}` wrapping the hook error |
+| Startup quorum health gate breached | Returns `ExecutionResult{Error: *vuhive.StartupQuorumError}`, `ExitCode() == 1` |
 | SLA threshold breached | Returns `ExecutionResult{Passed: false}`, `ExitCode() == 1` |
 | Execution aborted via abort_on_fail | Returns `ExecutionResult{Passed: false, Aborted: true, AbortReason: "..."}`, `ExitCode() == 1` |
 | Clean completion, all thresholds pass | Returns `ExecutionResult{Passed: true}`, `ExitCode() == 0` |

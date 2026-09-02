@@ -573,3 +573,43 @@ scenarios:
 	assert.Contains(t, setupErr.Error(), "db connection refused")
 }
 
+func TestRunSuite_StartupQuorumError(t *testing.T) {
+	cfgFile := createTempConfig(t, `
+version: "1.0"
+default_scenario: quorum_fail
+scenarios:
+  quorum_fail:
+    type: constant_vus
+    vus: 5
+    run_period: 500ms
+    vu_timeout: 100ms
+    max_pretest_retries: 0
+    min_ready_ratio: 0.8
+    startup_grace_period: 200ms
+`)
+	reg := newMockRegistry("quorum-suite")
+	reg.Register("quorum_fail", engine.Scenario{
+		PreTest: func(ctx engine.VUContext) error {
+			if ctx.VUID() > 2 {
+				return errors.New("auth failure")
+			}
+			return nil
+		},
+		RunVU: func(ctx engine.VUContext) error {
+			return nil
+		},
+	})
+
+	var stdout bytes.Buffer
+	res := runner.RunSuite(reg, []string{"--config=" + cfgFile}, &stdout)
+	require.Error(t, res.Error)
+	assert.False(t, res.Passed)
+
+	var quorumErr *engine.StartupQuorumError
+	require.True(t, errors.As(res.Error, &quorumErr))
+	assert.Equal(t, 5, quorumErr.Target)
+	assert.Equal(t, 4, quorumErr.Required)
+	assert.Equal(t, 0.8, quorumErr.Ratio)
+}
+
+

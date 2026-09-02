@@ -26,6 +26,9 @@ const (
 	// MetricVUPretestErrors tracks the number of PreTest hook errors.
 	MetricVUPretestErrors = "vuhive.vu.pretest_errors"
 
+	// MetricVURestartsTotal tracks the total number of supervisor worker restart/retry attempts.
+	MetricVURestartsTotal = "vuhive.vu.restarts_total"
+
 	// MetricPacingDroppedIterations tracks the number of arrival-rate iterations dropped due to pool saturation.
 	MetricPacingDroppedIterations = "vuhive.pacing.dropped_iterations"
 

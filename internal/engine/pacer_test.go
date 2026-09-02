@@ -25,8 +25,9 @@ func (c *customTestPacer) Run(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
-) {
+) error {
 	c.invoked = true
+	return nil
 }
 
 func TestPacer_InterfaceSatisfaction(t *testing.T) {

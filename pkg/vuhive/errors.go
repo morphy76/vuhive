@@ -62,10 +62,44 @@ func (e *SetupError) Unwrap() error {
 	return e.Err
 }
 
+// ErrStartupQuorumFailed indicates that insufficient healthy Virtual Users passed initialization.
+var ErrStartupQuorumFailed = fmt.Errorf("vuhive: startup quorum failed: insufficient healthy virtual users")
+
+// StartupQuorumError details the startup quorum failure parameters.
+type StartupQuorumError struct {
+	// Ready is the number of VUs that successfully passed PreTest.
+	Ready int
+	// Target is the total target number of VUs.
+	Target int
+	// Required is the minimum number of ready VUs needed to achieve quorum.
+	Required int
+	// Ratio is the configured min_ready_ratio threshold.
+	Ratio float64
+	// Err is the underlying cause of failure.
+	Err error
+}
+
+func (e *StartupQuorumError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("vuhive: startup quorum failed: %d/%d ready (required %d, min_ready_ratio %.2f): %v", e.Ready, e.Target, e.Required, e.Ratio, e.Err)
+	}
+	return fmt.Sprintf("vuhive: startup quorum failed: %d/%d ready (required %d, min_ready_ratio %.2f)", e.Ready, e.Target, e.Required, e.Ratio)
+}
+
+func (e *StartupQuorumError) Unwrap() error {
+	return e.Err
+}
+
+func (e *StartupQuorumError) Is(target error) bool {
+	return target == ErrStartupQuorumFailed
+}
+
 // Compile-time interface satisfaction checks.
 var (
 	_ error = (*ConfigError)(nil)
 	_ error = (*ValidationError)(nil)
 	_ error = (*ScenarioNotFoundError)(nil)
 	_ error = (*SetupError)(nil)
+	_ error = (*StartupQuorumError)(nil)
 )
+
