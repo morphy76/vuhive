@@ -19,7 +19,7 @@ type PacingEngine interface {
 		globalState map[string]any,
 		logger log.Logger,
 		metrics metric.Collector,
-	)
+	) error
 }
 
 // ConstantVUsPacer executes the constant_vus pacing strategy.
@@ -34,8 +34,8 @@ func (p *ConstantVUsPacer) Run(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
-) {
-	RunConstantVUs(ctx, scenario, cfg, scenarioName, globalState, logger, metrics)
+) error {
+	return RunConstantVUs(ctx, scenario, cfg, scenarioName, globalState, logger, metrics)
 }
 
 // ArrivalRatePacer executes the arrival_rate pacing strategy.
@@ -50,8 +50,8 @@ func (p *ArrivalRatePacer) Run(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
-) {
-	RunArrivalRate(ctx, scenario, cfg, scenarioName, globalState, logger, metrics)
+) error {
+	return RunArrivalRate(ctx, scenario, cfg, scenarioName, globalState, logger, metrics)
 }
 
 // RampingVUsPacer executes the ramping_vus pacing strategy.
@@ -66,8 +66,8 @@ func (p *RampingVUsPacer) Run(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
-) {
-	RunRampingVUs(ctx, scenario, cfg, scenarioName, globalState, logger, metrics)
+) error {
+	return RunRampingVUs(ctx, scenario, cfg, scenarioName, globalState, logger, metrics)
 }
 
 // PacingRegistry manages registered PacingEngine implementations indexed by ScenarioType.

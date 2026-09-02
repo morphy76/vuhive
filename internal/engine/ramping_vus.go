@@ -25,7 +25,7 @@ func RunRampingVUs(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
-) {
+) error {
 	start := time.Now()
 	if logger != nil {
 		logger.Debug().
@@ -43,6 +43,15 @@ func RunRampingVUs(
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	var gate *StartupQuorumGate
+	if cfg.MinReadyRatio > 0 && len(cfg.Stages) > 0 && cfg.Stages[0].Target > 0 {
+		grace := cfg.StartupGracePeriod
+		if grace <= 0 {
+			grace = cfg.Stages[0].Duration + 10*time.Second
+		}
+		gate = NewStartupQuorumGate(cfg.Stages[0].Target, cfg.MinReadyRatio, grace, logger)
+	}
+
 	var (
 		wg       sync.WaitGroup
 		vuidSeq  int64
@@ -50,7 +59,7 @@ func RunRampingVUs(
 		activeMu sync.Mutex
 	)
 
-	adjustWorkers := func(desiredVUs int) {
+	adjustWorkers := func(desiredVUs int, wGate *StartupQuorumGate) {
 		activeMu.Lock()
 		defer activeMu.Unlock()
 
@@ -69,7 +78,7 @@ func RunRampingVUs(
 				}
 				workers = append(workers, w)
 				wg.Add(1)
-				go runRampingVUGoroutine(runCtx, w.stopCh, scenario, cfg, scenarioName, w.id, globalState, logger, metrics, &wg)
+				go runRampingVUGoroutine(runCtx, w.stopCh, scenario, cfg, scenarioName, w.id, globalState, logger, metrics, wGate, &wg)
 			}
 		} else if desiredVUs < currentCount {
 			toStop := currentCount - desiredVUs
@@ -77,6 +86,22 @@ func RunRampingVUs(
 				close(workers[i].stopCh)
 			}
 			workers = workers[:desiredVUs]
+		}
+	}
+
+	// Initial worker ramp/startup if stage 0 target > 0
+	if len(cfg.Stages) > 0 && cfg.Stages[0].Target > 0 && gate != nil {
+		adjustWorkers(cfg.Stages[0].Target, gate)
+		if err := gate.AwaitQuorum(runCtx); err != nil {
+			cancel()
+			activeMu.Lock()
+			for _, w := range workers {
+				close(w.stopCh)
+			}
+			workers = nil
+			activeMu.Unlock()
+			drainWorkers(runCtx, cancel, &wg, cfg.Drain, logger, metrics)
+			return err
 		}
 	}
 
@@ -113,18 +138,18 @@ stagesLoop:
 				stageDone = true
 			case <-stageTimer.C:
 				ticker.Stop()
-				adjustWorkers(targetVU)
+				adjustWorkers(targetVU, nil)
 				stageDone = true
 			case <-ticker.C:
 				elapsed := time.Since(stageStart)
 				if elapsed >= stageDuration {
-					adjustWorkers(targetVU)
+					adjustWorkers(targetVU, nil)
 					stageDone = true
 				} else {
 					progress := float64(elapsed) / float64(stageDuration)
 					desired := float64(startVU) + progress*float64(targetVU-startVU)
 					desiredCount := int(math.Round(desired))
-					adjustWorkers(desiredCount)
+					adjustWorkers(desiredCount, nil)
 				}
 			}
 		}
@@ -158,8 +183,8 @@ stagesLoop:
 			Dur("duration_ms", time.Since(start)).
 			Msg("completed ramping_vus pacing execution")
 	}
+	return nil
 }
-
 
 func runRampingVUGoroutine(
 	ctx context.Context,
@@ -171,6 +196,7 @@ func runRampingVUGoroutine(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
+	gate *StartupQuorumGate,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
@@ -191,15 +217,19 @@ func runRampingVUGoroutine(
 		}
 	}()
 
-	// PreTest hook (if present)
-	if scenario.PreTest != nil {
-		sCtx.prepareIteration(ctx, 0)
-		if err := scenario.PreTest(sCtx); err != nil {
-			metrics.Counter(metric.MetricVUPretestErrors, metric.Tags{}).Inc()
-			if logger != nil {
-				logger.Error().Err(err).Msg("PreTest hook failed, skipping RunVU")
-			}
-			return // skips RunVU, deferred AfterTest still runs
+	// Supervised PreTest execution with retry/backoff
+	if err := runSupervisedPreTest(ctx, stopCh, scenario, sCtx, cfg, logger, metrics); err != nil {
+		if gate != nil {
+			gate.RecordFailed(vuid, err)
+		}
+		return // skips RunVU, deferred AfterTest still runs
+	}
+
+	// Startup Quorum Gate synchronization
+	if gate != nil {
+		gate.RecordReady(vuid)
+		if err := gate.WaitReady(ctx); err != nil {
+			return
 		}
 	}
 

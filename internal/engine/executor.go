@@ -132,7 +132,16 @@ func (e *Executor) Execute(ctx context.Context) error {
 		return fmt.Errorf("vuhive: unsupported scenario type %q", e.Config.Type)
 	}
 
-	e.Pacer.Run(pacingCtx, e.Scenario, e.Config, e.ScenarioName, globalState, e.Logger, e.Metrics)
+	pacerErr := e.Pacer.Run(pacingCtx, e.Scenario, e.Config, e.ScenarioName, globalState, e.Logger, e.Metrics)
+	if pacerErr != nil {
+		if e.Scenario.Teardown != nil {
+			teardownCtx := newScenarioContext(ctx, 0, 0, e.Config, e.ScenarioName, globalState, e.Logger, e.Metrics)
+			if err := e.Scenario.Teardown(teardownCtx, globalState); err != nil && e.Logger != nil {
+				e.Logger.Error().Err(err).Msg("Teardown hook error")
+			}
+		}
+		return pacerErr
+	}
 
 	select {
 	case <-abortedCh:

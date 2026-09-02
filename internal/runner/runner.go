@@ -60,6 +60,10 @@ func RunSuite(s ScenarioRegistry, args []string, stdout io.Writer) Result {
 		if errors.As(execErr, &setupErr) {
 			return Result{Error: setupErr}
 		}
+		var quorumErr *engine.StartupQuorumError
+		if errors.As(execErr, &quorumErr) {
+			return Result{Error: quorumErr}
+		}
 		return Result{Error: execErr}
 	}
 

@@ -196,3 +196,53 @@ func TestDTO_ToModel_DrainAndDrainPeriod(t *testing.T) {
 	})
 }
 
+func TestDTO_ToModel_SupervisorAndQuorum(t *testing.T) {
+	t.Run("defaults max_pretest_retries to 3 when unset", func(t *testing.T) {
+		dto := configDTO{
+			Scenarios: map[string]scenarioConfigDTO{
+				"s1": {Type: ScenarioTypeConstantVUs},
+			},
+		}
+		cfg := dto.toModel()
+		require.NotNil(t, cfg)
+		assert.Equal(t, 3, cfg.Scenarios["s1"].MaxPreTestRetries)
+		assert.Equal(t, 0.0, cfg.Scenarios["s1"].MinReadyRatio)
+		assert.Equal(t, time.Duration(0), cfg.Scenarios["s1"].StartupGracePeriod)
+	})
+
+	t.Run("preserves explicitly configured supervisor and quorum fields", func(t *testing.T) {
+		retries := 5
+		dto := configDTO{
+			Scenarios: map[string]scenarioConfigDTO{
+				"s1": {
+					Type:               ScenarioTypeConstantVUs,
+					MaxPreTestRetries:  &retries,
+					MinReadyRatio:      0.9,
+					StartupGracePeriod: 10 * time.Second,
+				},
+			},
+		}
+		cfg := dto.toModel()
+		require.NotNil(t, cfg)
+		assert.Equal(t, 5, cfg.Scenarios["s1"].MaxPreTestRetries)
+		assert.Equal(t, 0.9, cfg.Scenarios["s1"].MinReadyRatio)
+		assert.Equal(t, 10*time.Second, cfg.Scenarios["s1"].StartupGracePeriod)
+	})
+
+	t.Run("allows max_pretest_retries explicitly set to 0", func(t *testing.T) {
+		zeroRetries := 0
+		dto := configDTO{
+			Scenarios: map[string]scenarioConfigDTO{
+				"s1": {
+					Type:              ScenarioTypeConstantVUs,
+					MaxPreTestRetries: &zeroRetries,
+				},
+			},
+		}
+		cfg := dto.toModel()
+		require.NotNil(t, cfg)
+		assert.Equal(t, 0, cfg.Scenarios["s1"].MaxPreTestRetries)
+	})
+}
+
+

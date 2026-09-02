@@ -22,7 +22,7 @@ func RunArrivalRate(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
-) {
+) error {
 	start := time.Now()
 	if logger != nil {
 		logger.Debug().
@@ -43,6 +43,15 @@ func RunArrivalRate(
 	maxVUs := cfg.MaxVUs
 	if maxVUs <= 0 {
 		maxVUs = 1
+	}
+
+	var gate *StartupQuorumGate
+	if cfg.MinReadyRatio > 0 {
+		grace := cfg.StartupGracePeriod
+		if grace <= 0 {
+			grace = cfg.RampUp + 10*time.Second
+		}
+		gate = NewStartupQuorumGate(maxVUs, cfg.MinReadyRatio, grace, logger)
 	}
 
 	// Bounded burst buffer: absorbs transient worker availability fluctuations
@@ -67,7 +76,17 @@ func RunArrivalRate(
 	wg.Add(maxVUs)
 	for i := 1; i <= maxVUs; i++ {
 		vuid := int64(i)
-		go runArrivalRateWorkerPool(runCtx, tokenCh, scenario, cfg, scenarioName, vuid, globalState, logger, metrics, &wg)
+		go runArrivalRateWorkerPool(runCtx, tokenCh, scenario, cfg, scenarioName, vuid, globalState, logger, metrics, gate, &wg)
+	}
+
+	// Startup Quorum Gate: await readiness before token dispatch
+	if gate != nil {
+		if err := gate.AwaitQuorum(runCtx); err != nil {
+			cancel()
+			closeTokens()
+			drainWorkers(runCtx, cancel, &wg, cfg.Drain, logger, metrics)
+			return err
+		}
 	}
 
 	dispatchToken := func() {
@@ -88,7 +107,7 @@ func RunArrivalRate(
 		case <-dispatchCtx.Done():
 			closeTokens()
 			drainWorkers(runCtx, cancel, &wg, cfg.Drain, logger, metrics)
-			return
+			return nil
 		case <-time.After(midpoint):
 			dispatchToken()
 		}
@@ -98,32 +117,26 @@ func RunArrivalRate(
 		case <-dispatchCtx.Done():
 			closeTokens()
 			drainWorkers(runCtx, cancel, &wg, cfg.Drain, logger, metrics)
-			return
+			return nil
 		case <-time.After(remainingRamp):
 		}
 	}
 
-	// 2. Steady-state phase — token dispatch ends at ramp_up + run_period + ramp_down
+	// 2. Steady-state run_period + 3. Ramp-down phase
 	limiter := rate.NewLimiter(rate.Limit(cfg.TargetTPS), 1)
 
-dispatchLoop:
+steadyLoop:
 	for {
-		select {
-		case <-dispatchCtx.Done():
-			break dispatchLoop
-		default:
-		}
-
 		if err := limiter.Wait(dispatchCtx); err != nil {
-			break dispatchLoop
+			break steadyLoop
 		}
-
 		dispatchToken()
 	}
 
+	// Stop dispatching tokens to workers
 	closeTokens()
 
-	// Drain execution phase: wait up to cfg.Drain for remaining in-flight workers to finish
+	// Drain execution phase: wait up to cfg.Drain for remaining in-flight VUs to finish
 	drainWorkers(runCtx, cancel, &wg, cfg.Drain, logger, metrics)
 
 	if logger != nil {
@@ -133,8 +146,8 @@ dispatchLoop:
 			Dur("duration_ms", time.Since(start)).
 			Msg("completed arrival_rate pacing execution")
 	}
+	return nil
 }
-
 
 func runArrivalRateWorkerPool(
 	ctx context.Context,
@@ -146,6 +159,7 @@ func runArrivalRateWorkerPool(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
+	gate *StartupQuorumGate,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
@@ -166,15 +180,19 @@ func runArrivalRateWorkerPool(
 		}
 	}()
 
-	// PreTest hook (if present)
-	if scenario.PreTest != nil {
-		sCtx.prepareIteration(ctx, 0)
-		if err := scenario.PreTest(sCtx); err != nil {
-			metrics.Counter(metric.MetricVUPretestErrors, metric.Tags{}).Inc()
-			if logger != nil {
-				logger.Error().Err(err).Msg("PreTest hook failed, skipping worker execution")
-			}
-			return // skips RunVU, deferred AfterTest still runs
+	// Supervised PreTest execution with retry/backoff
+	if err := runSupervisedPreTest(ctx, ctx.Done(), scenario, sCtx, cfg, logger, metrics); err != nil {
+		if gate != nil {
+			gate.RecordFailed(vuid, err)
+		}
+		return // skips RunVU, deferred AfterTest still runs
+	}
+
+	// Startup Quorum Gate synchronization
+	if gate != nil {
+		gate.RecordReady(vuid)
+		if err := gate.WaitReady(ctx); err != nil {
+			return
 		}
 	}
 

@@ -814,3 +814,105 @@ func TestValidate_ArrivalRate_ValidBurstBuffer(t *testing.T) {
 	err := config.Validate(cfg)
 	require.NoError(t, err)
 }
+
+func TestValidate_SupervisorAndStartupQuorum(t *testing.T) {
+	t.Run("valid supervisor and quorum settings", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:               config.ScenarioTypeConstantVUs,
+					VUs:                10,
+					RunPeriod:          10 * time.Second,
+					VUTimeout:          1 * time.Second,
+					MaxPreTestRetries:  3,
+					MinReadyRatio:      0.9,
+					StartupGracePeriod: 5 * time.Second,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.NoError(t, err)
+	})
+
+	t.Run("negative max_pretest_retries invalid", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:              config.ScenarioTypeConstantVUs,
+					VUs:               10,
+					RunPeriod:         10 * time.Second,
+					VUTimeout:         1 * time.Second,
+					MaxPreTestRetries: -1,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.Error(t, err)
+		var valErr *config.ValidationError
+		require.True(t, errors.As(err, &valErr))
+		assert.Equal(t, "scenarios.s1.max_pretest_retries", valErr.Field)
+	})
+
+	t.Run("min_ready_ratio below zero invalid", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:          config.ScenarioTypeConstantVUs,
+					VUs:           10,
+					RunPeriod:     10 * time.Second,
+					VUTimeout:     1 * time.Second,
+					MinReadyRatio: -0.1,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.Error(t, err)
+		var valErr *config.ValidationError
+		require.True(t, errors.As(err, &valErr))
+		assert.Equal(t, "scenarios.s1.min_ready_ratio", valErr.Field)
+	})
+
+	t.Run("min_ready_ratio above 1.0 invalid", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:          config.ScenarioTypeConstantVUs,
+					VUs:           10,
+					RunPeriod:     10 * time.Second,
+					VUTimeout:     1 * time.Second,
+					MinReadyRatio: 1.1,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.Error(t, err)
+		var valErr *config.ValidationError
+		require.True(t, errors.As(err, &valErr))
+		assert.Equal(t, "scenarios.s1.min_ready_ratio", valErr.Field)
+	})
+
+	t.Run("negative startup_grace_period invalid", func(t *testing.T) {
+		cfg := &config.Config{
+			Version: "1.0",
+			Scenarios: map[string]config.ScenarioConfig{
+				"s1": {
+					Type:               config.ScenarioTypeConstantVUs,
+					VUs:                10,
+					RunPeriod:          10 * time.Second,
+					VUTimeout:          1 * time.Second,
+					StartupGracePeriod: -1 * time.Second,
+				},
+			},
+		}
+		err := config.Validate(cfg)
+		require.Error(t, err)
+		var valErr *config.ValidationError
+		require.True(t, errors.As(err, &valErr))
+		assert.Equal(t, "scenarios.s1.startup_grace_period", valErr.Field)
+	})
+}
+

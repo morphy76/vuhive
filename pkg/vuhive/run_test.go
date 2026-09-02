@@ -2,6 +2,7 @@ package vuhive_test
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -241,3 +242,50 @@ scenarios:
 	require.NoError(t, res.Error)
 	assert.True(t, res.Passed)
 }
+
+func TestRunWithArgs_StartupQuorumError(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "vuhive.yaml")
+
+	yamlContent := `version: "1.0"
+default_scenario: quorum_test
+scenarios:
+  quorum_test:
+    type: constant_vus
+    vus: 5
+    run_period: 1s
+    vu_timeout: 1s
+    max_pretest_retries: 0
+    min_ready_ratio: 0.8
+    startup_grace_period: 500ms
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(yamlContent), 0644))
+
+	var stdout bytes.Buffer
+	res := vuhive.RunWithArgs(
+		"quorum_test",
+		func(ctx vuhive.VUContext) error {
+			return nil
+		},
+		[]string{"--config", configPath},
+		&stdout,
+		vuhive.WithPreTest(func(ctx vuhive.VUContext) error {
+			if ctx.VUID() > 2 {
+				return errors.New("auth failed")
+			}
+			return nil
+		}),
+	)
+
+	require.Error(t, res.Error)
+	assert.False(t, res.Passed)
+	assert.Equal(t, 1, res.ExitCode())
+	assert.True(t, errors.Is(res.Error, vuhive.ErrStartupQuorumFailed))
+
+	var quorumErr *vuhive.StartupQuorumError
+	require.True(t, errors.As(res.Error, &quorumErr))
+	assert.Equal(t, 5, quorumErr.Target)
+	assert.Equal(t, 4, quorumErr.Required)
+	assert.Equal(t, 0.8, quorumErr.Ratio)
+}
+

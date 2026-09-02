@@ -28,6 +28,9 @@ type scenarioConfigDTO struct {
 	RampDown         time.Duration        `mapstructure:"ramp_down"`
 	Drain            time.Duration        `mapstructure:"drain"`
 	DrainPeriod      time.Duration        `mapstructure:"drain_period"`
+	MaxPreTestRetries *int                `mapstructure:"max_pretest_retries"`
+	MinReadyRatio    float64              `mapstructure:"min_ready_ratio"`
+	StartupGracePeriod time.Duration      `mapstructure:"startup_grace_period"`
 	VUTimeout        time.Duration        `mapstructure:"vu_timeout"`
 	Params           map[string]string    `mapstructure:"params"`
 	InteractionDelay *thinkTimeConfigDTO  `mapstructure:"interaction_delay"`
@@ -119,17 +122,24 @@ func (d *scenarioConfigDTO) toModel() ScenarioConfig {
 	if drain == 0 && d.DrainPeriod != 0 {
 		drain = d.DrainPeriod
 	}
+	maxPreTestRetries := 3
+	if d.MaxPreTestRetries != nil {
+		maxPreTestRetries = *d.MaxPreTestRetries
+	}
 	sc := ScenarioConfig{
-		Type:        d.Type,
-		VUs:         d.VUs,
-		TargetTPS:   d.TargetTPS,
-		MaxVUs:      d.MaxVUs,
-		BurstBuffer: d.BurstBuffer,
-		RampUp:      d.RampUp,
-		RunPeriod:   d.RunPeriod,
-		RampDown:    d.RampDown,
-		Drain:       drain,
-		VUTimeout:   d.VUTimeout,
+		Type:               d.Type,
+		VUs:                d.VUs,
+		TargetTPS:          d.TargetTPS,
+		MaxVUs:             d.MaxVUs,
+		BurstBuffer:        d.BurstBuffer,
+		RampUp:             d.RampUp,
+		RunPeriod:          d.RunPeriod,
+		RampDown:           d.RampDown,
+		Drain:              drain,
+		MaxPreTestRetries:  maxPreTestRetries,
+		MinReadyRatio:      d.MinReadyRatio,
+		StartupGracePeriod: d.StartupGracePeriod,
+		VUTimeout:          d.VUTimeout,
 	}
 
 	if d.Stages != nil {

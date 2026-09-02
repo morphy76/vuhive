@@ -105,6 +105,28 @@ func TestPublicErrorTypes(t *testing.T) {
 		assert.Equal(t, "vuhive: setup hook failed: db connection failed", setupErr.Error())
 		assert.Equal(t, baseErr, setupErr.Unwrap())
 	})
+
+	t.Run("StartupQuorumError", func(t *testing.T) {
+		baseErr := errors.New("token acquisition failed")
+		quorumErr := &vuhive.StartupQuorumError{
+			Ready:    5,
+			Target:   10,
+			Required: 9,
+			Ratio:    0.9,
+			Err:      baseErr,
+		}
+		assert.Equal(t, "vuhive: startup quorum failed: 5/10 ready (required 9, min_ready_ratio 0.90): token acquisition failed", quorumErr.Error())
+		assert.Equal(t, baseErr, quorumErr.Unwrap())
+		assert.True(t, errors.Is(quorumErr, vuhive.ErrStartupQuorumFailed))
+
+		quorumErrNoErr := &vuhive.StartupQuorumError{
+			Ready:    5,
+			Target:   10,
+			Required: 9,
+			Ratio:    0.9,
+		}
+		assert.Equal(t, "vuhive: startup quorum failed: 5/10 ready (required 9, min_ready_ratio 0.90)", quorumErrNoErr.Error())
+	})
 }
 
 func TestPublicSummaryDataMethods(t *testing.T) {

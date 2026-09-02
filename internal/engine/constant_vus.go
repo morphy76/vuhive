@@ -22,7 +22,7 @@ func RunConstantVUs(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
-) {
+) error {
 	start := time.Now()
 	if logger != nil {
 		logger.Debug().
@@ -35,9 +35,16 @@ func RunConstantVUs(
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	var gate *StartupQuorumGate
+	if cfg.MinReadyRatio > 0 {
+		grace := cfg.StartupGracePeriod
+		if grace <= 0 {
+			grace = cfg.RampUp + 10*time.Second
+		}
+		gate = NewStartupQuorumGate(cfg.VUs, cfg.MinReadyRatio, grace, logger)
+	}
+
 	activeDuration := cfg.RampUp + cfg.RunPeriod + cfg.RampDown
-	stopTimer := time.NewTimer(activeDuration)
-	defer stopTimer.Stop()
 	stopCh := make(chan struct{})
 
 	var wg sync.WaitGroup
@@ -52,15 +59,28 @@ func RunConstantVUs(
 			case <-runCtx.Done():
 				close(stopCh)
 				drainWorkers(runCtx, cancel, &wg, cfg.Drain, logger, metrics)
-				return
+				return runCtx.Err()
 			case <-time.After(interval):
 			}
 		}
 
 		wg.Add(1)
 		vuid := int64(i)
-		go runVUGoroutine(runCtx, stopCh, scenario, cfg, scenarioName, vuid, globalState, logger, metrics, &wg)
+		go runVUGoroutine(runCtx, stopCh, scenario, cfg, scenarioName, vuid, globalState, logger, metrics, gate, &wg)
 	}
+
+	// Startup Quorum Gate: await readiness before counting scenario execution time
+	if gate != nil {
+		if err := gate.AwaitQuorum(runCtx); err != nil {
+			cancel()
+			close(stopCh)
+			drainWorkers(runCtx, cancel, &wg, cfg.Drain, logger, metrics)
+			return err
+		}
+	}
+
+	stopTimer := time.NewTimer(activeDuration)
+	defer stopTimer.Stop()
 
 	// Active execution phase: wait until active duration completes or context is cancelled
 	select {
@@ -80,8 +100,8 @@ func RunConstantVUs(
 			Dur("duration_ms", time.Since(start)).
 			Msg("completed constant_vus pacing execution")
 	}
+	return nil
 }
-
 
 func runVUGoroutine(
 	ctx context.Context,
@@ -93,6 +113,7 @@ func runVUGoroutine(
 	globalState map[string]any,
 	logger log.Logger,
 	metrics metric.Collector,
+	gate *StartupQuorumGate,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
@@ -113,15 +134,19 @@ func runVUGoroutine(
 		}
 	}()
 
-	// PreTest hook (if present)
-	if scenario.PreTest != nil {
-		sCtx.prepareIteration(ctx, 0)
-		if err := scenario.PreTest(sCtx); err != nil {
-			metrics.Counter(metric.MetricVUPretestErrors, metric.Tags{}).Inc()
-			if logger != nil {
-				logger.Error().Err(err).Msg("PreTest hook failed, skipping RunVU")
-			}
-			return // skips RunVU, deferred AfterTest still runs
+	// Supervised PreTest execution with retry/backoff
+	if err := runSupervisedPreTest(ctx, stopCh, scenario, sCtx, cfg, logger, metrics); err != nil {
+		if gate != nil {
+			gate.RecordFailed(vuid, err)
+		}
+		return // skips RunVU, deferred AfterTest still runs
+	}
+
+	// Startup Quorum Gate synchronization
+	if gate != nil {
+		gate.RecordReady(vuid)
+		if err := gate.WaitReady(ctx); err != nil {
+			return
 		}
 	}
 

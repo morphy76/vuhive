@@ -366,6 +366,30 @@ func validateScenario(name string, sc *ScenarioConfig) error {
 		}
 	}
 
+	// max_pretest_retries must be >= 0.
+	if sc.MaxPreTestRetries < 0 {
+		return &ValidationError{
+			Field:   prefix + ".max_pretest_retries",
+			Message: "must be >= 0",
+		}
+	}
+
+	// min_ready_ratio must be between 0.0 and 1.0.
+	if sc.MinReadyRatio < 0.0 || sc.MinReadyRatio > 1.0 {
+		return &ValidationError{
+			Field:   prefix + ".min_ready_ratio",
+			Message: "must be between 0.0 and 1.0",
+		}
+	}
+
+	// startup_grace_period must be >= 0.
+	if sc.StartupGracePeriod < 0 {
+		return &ValidationError{
+			Field:   prefix + ".startup_grace_period",
+			Message: "must be >= 0",
+		}
+	}
+
 
 	// Validate params: keys and values must be non-empty strings.
 	for k, v := range sc.Params {
