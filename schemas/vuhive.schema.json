@@ -488,6 +488,12 @@
           },
           "description": "Key-value parameters made available to test code via ctx.Param(), ctx.ParamInt(), or ctx.ParamDuration()."
         },
+        "strict": {
+          "type": "string",
+          "enum": ["off", "warn", "fatal"],
+          "default": "off",
+          "description": "Strict validation mode: 'off' (default, no diagnostics), 'warn' (emit warnings for unused YAML params and unmatched threshold metrics), 'fatal' (like warn but fails execution with exit code 1 if diagnostics are found)."
+        },
         "interaction_delay": {
           "$ref": "#/$defs/think_time",
           "description": "Thinking time strategy evaluated by ctx.Sleep() when called with no arguments."

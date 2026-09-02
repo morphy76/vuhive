@@ -67,9 +67,15 @@ type jsonReportDocument struct {
 	Checks      []jsonCheckEntry      `json:"checks,omitempty"`
 	Groups      []jsonGroupEntry      `json:"groups,omitempty"`
 	Thresholds  []jsonThresholdEntry  `json:"thresholds"`
-	Passed      bool                  `json:"passed"`
-	Aborted     bool                  `json:"aborted"`
-	AbortReason string                `json:"abort_reason,omitempty"`
+	Passed            bool                  `json:"passed"`
+	Aborted           bool                  `json:"aborted"`
+	AbortReason       string                `json:"abort_reason,omitempty"`
+	StrictDiagnostics []jsonStrictEntry     `json:"strict_diagnostics,omitempty"`
+}
+
+type jsonStrictEntry struct {
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
 }
 
 // GenerateJSONReport formats and writes the JSON report document to w.
@@ -117,6 +123,10 @@ func GenerateJSONReport(w io.Writer, data ReportData) error {
 		Passed:      data.Passed,
 		Aborted:     data.Aborted,
 		AbortReason: data.AbortReason,
+	}
+
+	for _, d := range data.StrictDiagnostics {
+		doc.StrictDiagnostics = append(doc.StrictDiagnostics, jsonStrictEntry(d))
 	}
 
 

@@ -25,8 +25,9 @@ type ReportParams struct {
 	ScenarioCfg      config.ScenarioConfig
 	Flags            *cli.Flags
 	MetricsStore     metric.Reader
-	ThresholdResults []sla.ThresholdResult
-	AllPassed        bool
+	ThresholdResults  []sla.ThresholdResult
+	StrictDiagnostics []StrictDiagnostic
+	AllPassed         bool
 	Aborted          bool
 	AbortReason      string
 	StartedAt        time.Time
@@ -38,18 +39,19 @@ type ReportParams struct {
 // ReportExecution formats and writes test reports and triggers the HandleSummary hook.
 func ReportExecution(ctx context.Context, p ReportParams) {
 	reportData := report.ReportData{
-		SuiteName:   p.SuiteName,
-		Scenario:    p.ScenarioName,
-		Version:     version.Version,
-		Commit:      version.Commit,
-		StartedAt:   p.StartedAt,
-		EndedAt:     p.EndedAt,
-		Config:      p.ScenarioCfg,
-		Metrics:     p.MetricsStore,
-		Thresholds:  p.ThresholdResults,
-		Passed:      p.AllPassed,
-		Aborted:     p.Aborted,
-		AbortReason: p.AbortReason,
+		SuiteName:         p.SuiteName,
+		Scenario:          p.ScenarioName,
+		Version:           version.Version,
+		Commit:            version.Commit,
+		StartedAt:         p.StartedAt,
+		EndedAt:           p.EndedAt,
+		Config:            p.ScenarioCfg,
+		Metrics:           p.MetricsStore,
+		Thresholds:        p.ThresholdResults,
+		StrictDiagnostics: convertStrictDiagnostics(p.StrictDiagnostics),
+		Passed:            p.AllPassed,
+		Aborted:           p.Aborted,
+		AbortReason:       p.AbortReason,
 	}
 
 	reportFormat := "console"
@@ -123,4 +125,15 @@ func ReportExecution(ctx context.Context, p ReportParams) {
 // reportExecution is a package-private alias for ReportExecution.
 func reportExecution(ctx context.Context, p ReportParams) {
 	ReportExecution(ctx, p)
+}
+
+func convertStrictDiagnostics(diagnostics []StrictDiagnostic) []report.StrictDiagnosticEntry {
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	entries := make([]report.StrictDiagnosticEntry, len(diagnostics))
+	for i, d := range diagnostics {
+		entries[i] = report.StrictDiagnosticEntry(d)
+	}
+	return entries
 }

@@ -26,6 +26,47 @@ func TestIsDurationStat(t *testing.T) {
 	}
 }
 
+func TestValidate_StrictMode_ValidValues(t *testing.T) {
+	for _, mode := range []string{"", "off", "warn", "fatal"} {
+		t.Run("mode_"+mode, func(t *testing.T) {
+			cfg := &config.Config{
+				Version: "1.0",
+				Scenarios: map[string]config.ScenarioConfig{
+					"s1": {
+						Type:       config.ScenarioTypeConstantVUs,
+						VUs:        1,
+						RunPeriod:  10 * time.Second,
+						StrictMode: mode,
+					},
+				},
+			}
+			err := config.Validate(cfg)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestValidate_StrictMode_InvalidValue(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1.0",
+		Scenarios: map[string]config.ScenarioConfig{
+			"s1": {
+				Type:       config.ScenarioTypeConstantVUs,
+				VUs:        1,
+				RunPeriod:  10 * time.Second,
+				StrictMode: "invalid",
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	require.Error(t, err)
+	var valErr *config.ValidationError
+	require.True(t, errors.As(err, &valErr))
+	assert.Equal(t, "scenarios.s1.strict", valErr.Field)
+	assert.Contains(t, valErr.Message, "must be one of {off, warn, fatal}")
+}
+
+
 func TestValidate_CustomDelayValidatorRegistry(t *testing.T) {
 	// Register a custom delay strategy validator.
 	config.RegisterDelayValidator("custom_step", func(prefix string, delay *config.ThinkTimeConfig) error {

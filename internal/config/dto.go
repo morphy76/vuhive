@@ -36,6 +36,7 @@ type scenarioConfigDTO struct {
 	WatchdogStallThreshold time.Duration  `mapstructure:"watchdog_stall_threshold"`
 	WatchdogInterval time.Duration        `mapstructure:"watchdog_interval"`
 	Params           map[string]string    `mapstructure:"params"`
+	Strict           string               `mapstructure:"strict"`
 	InteractionDelay *thinkTimeConfigDTO  `mapstructure:"interaction_delay"`
 	ThinkTime        *thinkTimeConfigDTO  `mapstructure:"think_time"`
 	Thresholds       []thresholdConfigDTO `mapstructure:"thresholds"`
@@ -160,6 +161,7 @@ func (d *scenarioConfigDTO) toModel() ScenarioConfig {
 			sc.Params[k] = v
 		}
 	}
+	sc.StrictMode = d.Strict
 	if d.InteractionDelay != nil {
 		sc.InteractionDelay = d.InteractionDelay.toModel()
 	}

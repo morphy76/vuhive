@@ -27,6 +27,7 @@ type Executor struct {
 	Logger       log.Logger
 	Metrics      MetricsStore
 	Pacer        PacingEngine
+	SetupCtx     ScenarioContext
 	Aborted      bool
 	AbortReason  string
 }
@@ -98,10 +99,11 @@ func (e *Executor) Execute(ctx context.Context) error {
 	var globalState map[string]any
 
 	// 1. Setup phase
+	setupCtx := newScenarioContext(ctx, 0, 0, e.Config, e.ScenarioName, nil, e.Logger, e.Metrics)
+	e.SetupCtx = setupCtx
 	if e.Scenario.Setup != nil {
-		setupCtx := newScenarioContext(ctx, 0, 0, e.Config, e.ScenarioName, nil, e.Logger, e.Metrics)
 		var err error
-		globalState, err = e.Scenario.Setup(setupCtx)
+		globalState, err = e.Scenario.Setup(e.SetupCtx)
 		if err != nil {
 			return &SetupError{Err: err}
 		}

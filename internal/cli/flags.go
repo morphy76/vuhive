@@ -25,6 +25,10 @@ type Flags struct {
 	JSONReportOut string
 	// ShowVersion indicates whether to print the library version and exit.
 	ShowVersion bool
+	// Strict enables strict validation (warn about unused params and unmatched metrics).
+	Strict bool
+	// StrictFatal like Strict but fails execution.
+	StrictFatal bool
 }
 
 // ParseFlags parses command-line arguments into a Flags struct.
@@ -44,6 +48,8 @@ func ParseFlags(args []string, errOutput io.Writer) (*Flags, error) {
 	fs.StringVar(&flags.ReportOut, "report-out", "", "Write final report to this file path instead of stdout")
 	fs.StringVar(&flags.JSONReportOut, "json-report-out", "", "Write JSON report document to this file path")
 	fs.BoolVar(&flags.ShowVersion, "version", false, "Print library version and exit")
+	fs.BoolVar(&flags.Strict, "strict", false, "Enable strict validation: warn about unused YAML params and unmatched threshold metrics")
+	fs.BoolVar(&flags.StrictFatal, "strict-fatal", false, "Like --strict, but exit with code 1 if diagnostics are found")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("vuhive: invalid command line flags: %w", err)

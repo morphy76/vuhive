@@ -21,9 +21,16 @@ type ReportData struct {
 	Config      config.ScenarioConfig
 	Metrics     metric.Reader
 	Thresholds  []sla.ThresholdResult
-	Passed      bool
-	Aborted     bool
-	AbortReason string
+	Passed            bool
+	Aborted           bool
+	AbortReason       string
+	StrictDiagnostics []StrictDiagnosticEntry
+}
+
+// StrictDiagnosticEntry represents a strict validation diagnostic for report output.
+type StrictDiagnosticEntry struct {
+	Kind    string
+	Message string
 }
 
 // WriteReport outputs the report in the requested format (console or json) to w.

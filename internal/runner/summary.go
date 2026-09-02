@@ -21,10 +21,11 @@ type SummaryParams struct {
 	EndedAt          time.Time
 	Config           config.ScenarioConfig
 	MetricsStore     metric.Reader
-	ThresholdResults []sla.ThresholdResult
-	AllPassed        bool
-	Aborted          bool
-	AbortReason      string
+	ThresholdResults  []sla.ThresholdResult
+	StrictDiagnostics []report.StrictDiagnosticEntry
+	AllPassed         bool
+	Aborted           bool
+	AbortReason       string
 }
 
 // BuildSummaryData constructs report.SummaryData from SummaryParams using standard library sorting.
@@ -165,10 +166,11 @@ func BuildSummaryData(p SummaryParams) report.SummaryData {
 		Metrics:     metrics,
 		Checks:      checks,
 		Groups:      groups,
-		Thresholds:  thresholds,
-		Passed:      p.AllPassed,
-		Aborted:     p.Aborted,
-		AbortReason: p.AbortReason,
+		Thresholds:        thresholds,
+		Passed:            p.AllPassed,
+		Aborted:           p.Aborted,
+		AbortReason:       p.AbortReason,
+		StrictDiagnostics: p.StrictDiagnostics,
 	}
 }
 
