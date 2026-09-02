@@ -254,7 +254,10 @@ scenarios:
     max_pretest_retries: 3       # max PreTest retries on transient startup failure (optional, default 3)
     min_ready_ratio: 0.9         # min fraction of healthy VUs required to start test (optional, default 0.0)
     startup_grace_period: 10s    # timeout to achieve startup quorum (optional, default 10s)
-    vu_timeout: 2s               # per-iteration context deadline (required)
+    vu_timeout: 2s               # per-iteration context deadline (optional, defaults to 30s guard deadline)
+    allow_unbounded_iterations: false # explicitly allow unbounded iterations without guard deadline (optional, default false)
+    watchdog_stall_threshold: 5s # threshold to flag stuck/hanging iterations (optional, defaults to 3x timeout or 3x p99)
+    watchdog_interval: 500ms     # watchdog polling check interval (optional, default 500ms)
 
 
     # --- arrival_rate fields ---
@@ -433,7 +436,16 @@ req, _ := http.NewRequestWithContext(ctx, "POST", url, body)
 resp, err := client.Do(req)
 ```
 
-The context carries the `vu_timeout` deadline during VU iterations. When it expires, `ctx.Err() == context.DeadlineExceeded`.
+The context carries the `vu_timeout` deadline during VU iterations (or the default `30s` guard deadline if `vu_timeout` is omitted). When it expires, `ctx.Err() == context.DeadlineExceeded`.
+
+### Mandatory Guard Deadlines & Execution Watchdog
+
+To prevent permanent VU deadlocks and worker goroutine leaks when test code encounters blocking I/O, infinite loops, or deadlocked synchronization primitives:
+
+1. **Mandatory Guard Deadlines**: When `vu_timeout` is omitted or set to `0`, vuhive automatically applies a safety guard deadline (`30s`). If you intentionally require unbounded iterations (e.g. infinite event listeners), explicitly configure `allow_unbounded_iterations: true`.
+2. **Execution Watchdog**: A lightweight, lock-free background watchdog routine monitors active VU iteration durations.
+   - If an iteration exceeds the stall threshold (`watchdog_stall_threshold`, $3 \times \text{p99}$ latency, or `vu_timeout`), the watchdog logs structured `WARN` diagnostics (`vu_id`, `iteration`, `duration`, `threshold`) and increments `vuhive.vu.stalled_iterations`.
+   - Polling frequency can be customized via `watchdog_interval` (default: `500ms`).
 
 ---
 
@@ -603,6 +615,7 @@ All built-in metrics are exported as typed constants in `pkg/vuhive` (e.g. `vuhi
 | `vuhive.MetricVUPanics` | `vuhive.vu.panics` | Counter | RunVU panics recovered |
 | `vuhive.MetricVUPretestErrors` | `vuhive.vu.pretest_errors` | Counter | PreTest hook failures |
 | `vuhive.MetricVURestartsTotal` | `vuhive.vu.restarts_total` | Counter | Supervisor worker restart/retry attempts on PreTest failure |
+| `vuhive.MetricVUStalledIterations` | `vuhive.vu.stalled_iterations` | Counter | Stalled VU iterations detected by the execution watchdog |
 | `vuhive.MetricVUActive` | `vuhive.vu.active` | Gauge | Currently active VU goroutines |
 | `vuhive.MetricIterationDuration` | `vuhive.vu.iteration_duration` | Duration | Completed VU iteration duration |
 | `vuhive.MetricPacingDroppedIterations` | `vuhive.pacing.dropped_iterations` | Counter | Arrival-rate tokens dropped due to pool saturation |
@@ -1614,7 +1627,8 @@ In steady-state execution, each Virtual User goroutine runs with **0 heap alloca
 1. **Context Reuse**: The `ScenarioContext` instance is allocated once when the VU starts and is reused across all subsequent iterations. Only the iteration counter and active context are updated in place.
 2. **Hoisted Configurations**: Static scenario configurations (e.g. `interaction_delay` / `think_time` generators) are initialized once per VU rather than re-instantiated per iteration.
 3. **Pre-Bound Logging Context**: VU ID and scenario names are bound to the logger once at VU startup, avoiding repetitive zerolog dictionary allocations during iterations.
-4. **Lightweight Timeout Management**: When `vu_timeout` is not set or handled at the protocol layer, per-iteration Go runtime timer registration (`context.WithTimeout`) is bypassed entirely.
+4. **Lightweight Timeout Management**: When `allow_unbounded_iterations: true` is configured and `vu_timeout` is omitted or handled at the protocol layer, per-iteration Go runtime timer registration (`context.WithTimeout`) is bypassed entirely.
+5. **Lock-Free Watchdog Markers**: Execution watchdog tracking uses atomic operations (`VUTracker.Begin`/`VUTracker.End`) ensuring 0 heap allocations during iteration dispatch.
 
 ### 14.2 Lock-Free Metrics Architecture
 

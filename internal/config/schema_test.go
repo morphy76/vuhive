@@ -81,6 +81,9 @@ func TestJSONSchema_StructuralValidity(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, scenarioProps, "drain")
 	assert.Contains(t, scenarioProps, "drain_period")
+	assert.Contains(t, scenarioProps, "allow_unbounded_iterations")
+	assert.Contains(t, scenarioProps, "watchdog_stall_threshold")
+	assert.Contains(t, scenarioProps, "watchdog_interval")
 }
 
 

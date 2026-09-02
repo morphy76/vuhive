@@ -32,6 +32,9 @@ type scenarioConfigDTO struct {
 	MinReadyRatio    float64              `mapstructure:"min_ready_ratio"`
 	StartupGracePeriod time.Duration      `mapstructure:"startup_grace_period"`
 	VUTimeout        time.Duration        `mapstructure:"vu_timeout"`
+	AllowUnboundedIterations bool         `mapstructure:"allow_unbounded_iterations"`
+	WatchdogStallThreshold time.Duration  `mapstructure:"watchdog_stall_threshold"`
+	WatchdogInterval time.Duration        `mapstructure:"watchdog_interval"`
 	Params           map[string]string    `mapstructure:"params"`
 	InteractionDelay *thinkTimeConfigDTO  `mapstructure:"interaction_delay"`
 	ThinkTime        *thinkTimeConfigDTO  `mapstructure:"think_time"`
@@ -137,9 +140,12 @@ func (d *scenarioConfigDTO) toModel() ScenarioConfig {
 		RampDown:           d.RampDown,
 		Drain:              drain,
 		MaxPreTestRetries:  maxPreTestRetries,
-		MinReadyRatio:      d.MinReadyRatio,
-		StartupGracePeriod: d.StartupGracePeriod,
-		VUTimeout:          d.VUTimeout,
+		MinReadyRatio:            d.MinReadyRatio,
+		StartupGracePeriod:       d.StartupGracePeriod,
+		VUTimeout:                d.VUTimeout,
+		AllowUnboundedIterations: d.AllowUnboundedIterations,
+		WatchdogStallThreshold:   d.WatchdogStallThreshold,
+		WatchdogInterval:         d.WatchdogInterval,
 	}
 
 	if d.Stages != nil {

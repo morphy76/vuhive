@@ -334,12 +334,15 @@ func validateScenario(name string, sc *ScenarioConfig) error {
 		}
 	}
 
-	// vu_timeout is required and must be > 0.
-	if sc.VUTimeout <= 0 {
+	// Guard deadline defaulting and vu_timeout validation.
+	if sc.VUTimeout < 0 {
 		return &ValidationError{
 			Field:   prefix + ".vu_timeout",
-			Message: "must be > 0",
+			Message: "must be >= 0",
 		}
+	}
+	if sc.VUTimeout == 0 && !sc.AllowUnboundedIterations {
+		sc.VUTimeout = DefaultGuardDeadline
 	}
 
 	// ramp_up must be >= 0 (it defaults to 0).
@@ -386,6 +389,22 @@ func validateScenario(name string, sc *ScenarioConfig) error {
 	if sc.StartupGracePeriod < 0 {
 		return &ValidationError{
 			Field:   prefix + ".startup_grace_period",
+			Message: "must be >= 0",
+		}
+	}
+
+	// watchdog_stall_threshold must be >= 0.
+	if sc.WatchdogStallThreshold < 0 {
+		return &ValidationError{
+			Field:   prefix + ".watchdog_stall_threshold",
+			Message: "must be >= 0",
+		}
+	}
+
+	// watchdog_interval must be >= 0.
+	if sc.WatchdogInterval < 0 {
+		return &ValidationError{
+			Field:   prefix + ".watchdog_interval",
 			Message: "must be >= 0",
 		}
 	}

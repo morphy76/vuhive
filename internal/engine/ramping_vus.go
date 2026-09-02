@@ -59,6 +59,9 @@ func RunRampingVUs(
 		activeMu sync.Mutex
 	)
 
+	wd := NewExecutionWatchdog(runCtx, cfg, logger, metrics)
+	defer wd.Stop()
+
 	adjustWorkers := func(desiredVUs int, wGate *StartupQuorumGate) {
 		activeMu.Lock()
 		defer activeMu.Unlock()
@@ -78,7 +81,7 @@ func RunRampingVUs(
 				}
 				workers = append(workers, w)
 				wg.Add(1)
-				go runRampingVUGoroutine(runCtx, w.stopCh, scenario, cfg, scenarioName, w.id, globalState, logger, metrics, wGate, &wg)
+				go runRampingVUGoroutine(runCtx, w.stopCh, scenario, cfg, scenarioName, w.id, globalState, logger, metrics, wGate, wd, &wg)
 			}
 		} else if desiredVUs < currentCount {
 			toStop := currentCount - desiredVUs
@@ -197,6 +200,7 @@ func runRampingVUGoroutine(
 	logger log.Logger,
 	metrics metric.Collector,
 	gate *StartupQuorumGate,
+	wd ExecutionWatchdog,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
@@ -204,6 +208,9 @@ func runRampingVUGoroutine(
 	activeGauge := metrics.Gauge(metric.MetricVUActive, metric.Tags{})
 	activeGauge.Add(1)
 	defer activeGauge.Add(-1)
+
+	tracker := wd.RegisterVU(vuid)
+	defer tracker.Unregister()
 
 	sCtx := newVUScenarioContext(ctx, vuid, cfg, scenarioName, globalState, logger, metrics)
 
@@ -234,7 +241,7 @@ func runRampingVUGoroutine(
 	}
 
 	im := newIterationMetrics(metrics)
-	hasTimeout := cfg.VUTimeout > 0
+	effectiveTimeout, hasTimeout := getEffectiveVUTimeout(cfg)
 	var iteration int64
 	for {
 		select {
@@ -245,8 +252,9 @@ func runRampingVUGoroutine(
 		default:
 		}
 
+		tracker.Begin(iteration)
 		if hasTimeout {
-			iterCtx, cancel := context.WithTimeout(ctx, cfg.VUTimeout)
+			iterCtx, cancel := context.WithTimeout(ctx, effectiveTimeout)
 			sCtx.prepareIteration(iterCtx, iteration)
 			executeIteration(ctx, iterCtx, sCtx, scenario.RunVU, im, logger)
 			cancel()
@@ -254,6 +262,7 @@ func runRampingVUGoroutine(
 			sCtx.prepareIteration(ctx, iteration)
 			executeIteration(ctx, ctx, sCtx, scenario.RunVU, im, logger)
 		}
+		tracker.End()
 
 		iteration++
 	}

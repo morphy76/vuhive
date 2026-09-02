@@ -72,11 +72,14 @@ func RunArrivalRate(
 		close(tokenCh)
 	})
 
+	wd := NewExecutionWatchdog(runCtx, cfg, logger, metrics)
+	defer wd.Stop()
+
 	// Pre-spawn persistent worker pool of size MaxVUs
 	wg.Add(maxVUs)
 	for i := 1; i <= maxVUs; i++ {
 		vuid := int64(i)
-		go runArrivalRateWorkerPool(runCtx, tokenCh, scenario, cfg, scenarioName, vuid, globalState, logger, metrics, gate, &wg)
+		go runArrivalRateWorkerPool(runCtx, tokenCh, scenario, cfg, scenarioName, vuid, globalState, logger, metrics, gate, wd, &wg)
 	}
 
 	// Startup Quorum Gate: await readiness before token dispatch
@@ -160,6 +163,7 @@ func runArrivalRateWorkerPool(
 	logger log.Logger,
 	metrics metric.Collector,
 	gate *StartupQuorumGate,
+	wd ExecutionWatchdog,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
@@ -167,6 +171,9 @@ func runArrivalRateWorkerPool(
 	activeGauge := metrics.Gauge(metric.MetricVUActive, metric.Tags{})
 	activeGauge.Add(1)
 	defer activeGauge.Add(-1)
+
+	tracker := wd.RegisterVU(vuid)
+	defer tracker.Unregister()
 
 	sCtx := newVUScenarioContext(ctx, vuid, cfg, scenarioName, globalState, logger, metrics)
 
@@ -197,7 +204,7 @@ func runArrivalRateWorkerPool(
 	}
 
 	im := newIterationMetrics(metrics)
-	hasTimeout := cfg.VUTimeout > 0
+	effectiveTimeout, hasTimeout := getEffectiveVUTimeout(cfg)
 	for {
 		select {
 		case <-ctx.Done():
@@ -207,8 +214,9 @@ func runArrivalRateWorkerPool(
 				return
 			}
 
+			tracker.Begin(iteration)
 			if hasTimeout {
-				iterCtx, cancel := context.WithTimeout(ctx, cfg.VUTimeout)
+				iterCtx, cancel := context.WithTimeout(ctx, effectiveTimeout)
 				sCtx.prepareIteration(iterCtx, iteration)
 				executeIteration(ctx, iterCtx, sCtx, scenario.RunVU, im, logger)
 				cancel()
@@ -216,6 +224,7 @@ func runArrivalRateWorkerPool(
 				sCtx.prepareIteration(ctx, iteration)
 				executeIteration(ctx, ctx, sCtx, scenario.RunVU, im, logger)
 			}
+			tracker.End()
 		}
 	}
 }

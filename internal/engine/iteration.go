@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"time"
 
+	"github.com/morphy76/vuhive/internal/config"
 	"github.com/morphy76/vuhive/internal/log"
 	"github.com/morphy76/vuhive/internal/metric"
 )
@@ -94,4 +96,18 @@ func recordIterationResultFast(
 			im.total.Inc()
 		}
 	}
+}
+
+// getEffectiveVUTimeout determines the active iteration timeout duration.
+// If VUTimeout > 0, returns (VUTimeout, true).
+// If AllowUnboundedIterations is true and VUTimeout == 0, returns (0, false).
+// Otherwise, returns (DefaultGuardDeadline 30s, true).
+func getEffectiveVUTimeout(cfg config.ScenarioConfig) (time.Duration, bool) {
+	if cfg.VUTimeout > 0 {
+		return cfg.VUTimeout, true
+	}
+	if cfg.AllowUnboundedIterations {
+		return 0, false
+	}
+	return config.DefaultGuardDeadline, true
 }

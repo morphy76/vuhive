@@ -40,32 +40,36 @@ type StageConfig struct {
 	Duration time.Duration
 }
 
-// ScenarioConfig holds the configuration for a single load test scenario.
+// DefaultGuardDeadline is the default safety timeout applied to VU iterations when vu_timeout is omitted or unset.
+const DefaultGuardDeadline = 30 * time.Second
+
+// DefaultWatchdogInterval is the default polling interval for the execution watchdog to detect stalled VU worker routines.
+const DefaultWatchdogInterval = 500 * time.Millisecond
+
+// ScenarioConfig holds the runtime configuration for a single load testing scenario.
 type ScenarioConfig struct {
-	// Type is the execution model: "constant_vus", "arrival_rate", or "ramping_vus".
+	// Type is the scenario execution model (constant_vus, arrival_rate, ramping_vus).
 	Type ScenarioType
 
-	// VUs is the number of virtual user goroutines (required for constant_vus).
+	// VUs is the number of concurrent Virtual Users (required for constant_vus).
 	VUs int
 
-	// TargetTPS is the target transactions per second (required for arrival_rate).
+	// TargetTPS is the desired iterations per second (required for arrival_rate).
 	TargetTPS int
 
-	// MaxVUs is the hard cap on concurrent goroutines (required for arrival_rate).
+	// MaxVUs is the worker pool ceiling (required for arrival_rate).
 	MaxVUs int
 
-	// BurstBuffer is the bounded queue depth for arrival_rate token dispatch.
-	// Absorbs transient worker availability fluctuations before dropping tokens.
-	// When zero, a sensible default is computed automatically.
+	// BurstBuffer is the maximum backlog of scheduled iterations allowed before shedding load (optional for arrival_rate).
 	BurstBuffer int
 
-	// Stages defines the multi-stage ramping profile (required for ramping_vus).
+	// Stages defines the multi-stage target VU ramps (required for ramping_vus).
 	Stages []StageConfig
 
-	// RampUp is the duration to linearly ramp up to the target level.
+	// RampUp is the duration over which VUs are gradually started.
 	RampUp time.Duration
 
-	// RunPeriod is the steady-state execution duration (required for constant_vus and arrival_rate).
+	// RunPeriod is the duration for steady-state execution.
 	RunPeriod time.Duration
 
 	// RampDown is the duration for graceful ramp-down.
@@ -83,8 +87,17 @@ type ScenarioConfig struct {
 	// StartupGracePeriod is the maximum grace period to wait for startup quorum readiness.
 	StartupGracePeriod time.Duration
 
-	// VUTimeout is the per-iteration context timeout (required).
+	// VUTimeout is the per-iteration context timeout (defaults to DefaultGuardDeadline 30s if unset).
 	VUTimeout time.Duration
+
+	// AllowUnboundedIterations explicitly disables mandatory guard deadlines when VUTimeout is 0.
+	AllowUnboundedIterations bool
+
+	// WatchdogStallThreshold specifies a custom duration after which an in-flight iteration is flagged as stalled.
+	WatchdogStallThreshold time.Duration
+
+	// WatchdogInterval specifies the periodic interval at which the execution watchdog checks for stalled VUs (defaults to DefaultWatchdogInterval 500ms).
+	WatchdogInterval time.Duration
 
 	// Params is an arbitrary key-value map available to test code via ScenarioContext.Param().
 	Params map[string]string
