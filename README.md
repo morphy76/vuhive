@@ -2,7 +2,7 @@
 
 `vuhive` is a developer-centric, high-performance load testing library and execution framework built for Go 1.26+. It separates load profile configuration from scenario execution code, allowing developers to define test scenarios in Go with rich lifecycle hooks while managing concurrency, pacing profiles, and SLA assertions declaratively via YAML.
 
-> **New to vuhive?** See the [Developer Guide](docs/GUIDE.md) for a step-by-step adoption walkthrough.
+> **New to vuhive?** See the [Developer Guide](docs/GUIDE.md) for a step-by-step adoption walkthrough, and [AI_DISCLOSURE.md](AI_DISCLOSURE.md) for our Spec-Driven Development philosophy.
 
 ---
 
@@ -1070,7 +1070,12 @@ For complete architectural details, performance verification targets, `pprof` pr
 
 ## Development & Architecture
 
-For contributors, architecture guidelines (Hexagonal/DDD), technology stack constraints, structured logging patterns, and the strict TDD development cycle, see the [**Development Guide**](docs/DEVELOPMENT.md).
+`vuhive` is built following **Spec-Driven Development (SDD)** in symbiotic partnership with autonomous coding agents, where human engineers define the "what" (specifications, architecture, invariants, and quality gates) and coding agents execute the "how" (implementation, strict TDD test suites, zero-allocation optimizations, and documentation synchronization).
+
+- [**AI Disclosure & Spec-Driven Development**](AI_DISCLOSURE.md): Full disclosure on coding agent adoption, the "what" vs. "how" paradigm, and elevated engineering standards.
+- [**Development Guide**](docs/DEVELOPMENT.md): Contributor standards, release mechanics, Hexagonal Architecture guidelines, structured logging patterns, and strict TDD cycle.
+- [**System Specification**](SPECIFICATION.md): Complete technical blueprint and domain contracts.
+- [**Performance & Verification Guide**](docs/BENCHMARKS.md): Deterministic zero-allocation regression suites, performance budgets, and profiling recipes.
 
 ---
 
