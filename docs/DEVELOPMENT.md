@@ -1,6 +1,6 @@
 # vuhive Framework Developer Guidelines
 
-This document defines the development standards, release workflow, and architecture rules for developers and autonomous agents contributing to the `vuhive` framework.
+This document defines the development standards, release workflow, and architecture rules for developers and autonomous agents contributing to the `vuhive` framework. For our core engineering philosophy, Spec-Driven Development (SDD) model, and the division of responsibility between human engineers ("what") and coding agents ("how"), see [**AI_DISCLOSURE.md**](../AI_DISCLOSURE.md).
 
 ---
 

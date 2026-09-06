@@ -32,6 +32,7 @@ github.com/morphy76/vuhive/               ← module root
 ├── VERSION.vuhive                        ← SemVer plain-text file (e.g., "0.1.0")
 ├── Makefile
 ├── SPECIFICATION.md
+├── AI_DISCLOSURE.md                      ← Spec-Driven Development & AI agent disclosure
 │
 ├── pkg/
 │   └── vuhive/                           ← Public API surface (package vuhive)
