@@ -6,7 +6,7 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.3.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/nats-io/nats-server/v2 v2.14.6
-	github.com/nats-io/nats.go v1.51.0
+	github.com/nats-io/nats.go v1.53.1
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
