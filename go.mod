@@ -3,7 +3,7 @@ module github.com/morphy76/vuhive
 go 1.26.6
 
 require (
-	github.com/HdrHistogram/hdrhistogram-go v1.3.0
+	github.com/HdrHistogram/hdrhistogram-go v1.4.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/nats-io/nats-server/v2 v2.15.0
 	github.com/nats-io/nats.go v1.54.0
