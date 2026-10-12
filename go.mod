@@ -5,7 +5,7 @@ go 1.26.6
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.3.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
-	github.com/nats-io/nats-server/v2 v2.15.0
+	github.com/nats-io/nats-server/v2 v2.15.1
 	github.com/nats-io/nats.go v1.54.0
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/viper v1.21.0
@@ -20,7 +20,7 @@ require (
 	github.com/antithesishq/antithesis-sdk-go v0.8.0-default-no-op // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
-	github.com/klauspost/compress v1.20.0 // indirect
+	github.com/klauspost/compress v1.20.1 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/minio/highwayhash v1.0.4 // indirect
