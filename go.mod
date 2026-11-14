@@ -1,6 +1,6 @@
 module github.com/morphy76/vuhive
 
-go 1.26.6
+go 1.26.11
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.4.0
